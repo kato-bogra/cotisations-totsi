@@ -1,6 +1,8 @@
-# ⛪ Application de Gestion des Cotisations Sacerdotales & Caisse
+# ⛪ Application de Gestion des Cotisations Sacerdotales & Caisse — Paroisse de Totsi
 
-Application mobile (PWA) et web spécialement conçue pour une fraternité / groupe de prêtres afin de gérer les cotisations annuelles (10 000 FCFA), la caisse commune, les dépenses, les alertes d'anniversaires (J-2 et Jour-J), et les rapports financiers WhatsApp / PDF.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/kato-bogra/cotisations-totsi)
+
+Application mobile (PWA) et web spécialement conçue pour la **Paroisse de Totsi** afin de gérer les cotisations annuelles (10 000 FCFA), la caisse commune, les dépenses, les alertes d'anniversaires (J-2 et Jour-J), et les rapports financiers WhatsApp / PDF.
 
 ---
 
