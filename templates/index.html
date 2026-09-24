@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>{{ params.get('nom_groupe', 'Fraternité Sacerdotale') }} — Cotisations & Caisse</title>
+  
+  <!-- PWA & Mobile Web App Meta -->
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cotisations">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+
+  <!-- Icons & Fonts -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Header Fixe -->
+  <header class="top-header">
+    <div class="brand-section">
+      <div class="brand-icon" style="background:none; border:none; padding:0; overflow:hidden;">
+        <img src="/static/logo-totsi.jpg" alt="Paroisse de Totsi" style="width:100%; height:100%; object-fit:cover; border-radius:10px; border:1px solid var(--gold);">
+      </div>
+      <div>
+        <h1 class="brand-title app-nom-groupe">{{ params.get('nom_groupe', 'Paroisse de Totsi') }}</h1>
+        <div class="brand-subtitle"><i class="bi bi-geo-alt-fill"></i> Paroisse de Totsi • Cotisations & Caisse</div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <!-- Actions Visiteur -->
+      <div id="guest-actions" style="display:flex; gap:0.4rem;">
+        <button onclick="openModal('modal-login')" class="btn btn-outline" style="padding:0.4rem 0.75rem; font-size:0.78rem;">Connexion</button>
+        <button onclick="openModal('modal-register')" class="btn btn-gold" style="padding:0.4rem 0.75rem; font-size:0.78rem;">S'inscrire</button>
+      </div>
+
+      <!-- Profil Utilisateur Connecté -->
+      <div id="user-pill-section" style="display:none; align-items:center; gap:0.5rem;">
+        <div class="user-pill" onclick="openModal('modal-user-menu')">
+          <div id="user-pill-avatar" class="user-avatar-mini">P</div>
+          <span id="user-pill-name" style="font-size:0.8rem; font-weight:600; color:#fff;">Père</span>
+          <i class="bi bi-chevron-down" style="font-size:0.7rem; color:var(--text-muted);"></i>
+        </div>
+
+        <button onclick="switchTab('view-notifications', document.getElementById('nav-btn-notifs'))" class="icon-btn" title="Notifications">
+          <i class="bi bi-bell-fill"></i>
+          <span id="unread-notifs-badge" class="badge-counter" style="display:none;">0</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenu Principal -->
+  <main class="main-content">
+
+    <!-- HERO CARD : AVOIR EN CAISSE IMMÉDIAT (À L'OUVERTURE DE L'APP) -->
+    <div class="caisse-hero-card">
+      <div class="hero-label">
+        <i class="bi bi-wallet2"></i> Avoir net disponible en caisse
+      </div>
+      <div class="hero-amount">
+        <span id="hero-avoir-caisse">0</span>
+        <span class="hero-currency app-devise">{{ params.get('devise', 'FCFA') }}</span>
+      </div>
+
+      <div class="hero-stats-row">
+        <div class="hero-stat-item">
+          <span class="hero-stat-label">Total Cotisations Encaissées</span>
+          <span id="hero-total-cotisations" class="hero-stat-value green">0 FCFA</span>
+        </div>
+        <div class="hero-stat-item">
+          <span class="hero-stat-label">Dépenses Diverses Déduites</span>
+          <span id="hero-total-depenses" class="hero-stat-value rose">- 0 FCFA</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BARRE D'ACTIONS RAPIDES -->
+    <div class="quick-actions-bar">
+      <button onclick="openModal('modal-add-cotisation')" class="action-pill-btn green role-officer-only" style="display:none;">
+        <i class="bi bi-cash-coin"></i>
+        <span>Cotisation</span>
+      </button>
+
+      <button onclick="openModal('modal-add-depense')" class="action-pill-btn rose role-officer-only" style="display:none;">
+        <i class="bi bi-dash-circle"></i>
+        <span>Dépense</span>
+      </button>
+
+      <button onclick="partagerWhatsApp()" class="action-pill-btn whatsapp">
+        <i class="bi bi-whatsapp"></i>
+        <span>WhatsApp</span>
+      </button>
+
+      <button onclick="telechargerPDF()" class="action-pill-btn gold">
+        <i class="bi bi-file-earmark-pdf-fill"></i>
+        <span>Rapport PDF</span>
+      </button>
+
+      <button onclick="openModal('modal-create-member')" class="action-pill-btn role-officer-only" style="display:none;">
+        <i class="bi bi-person-plus-fill"></i>
+        <span>Nouveau Prêtre</span>
+      </button>
+    </div>
+
+    <!-- ================= ONGLET 1 : MON COMPTE (POUR CHAQUE PRÊTRE) ================= -->
+    <section id="view-mon-compte" class="tab-view active">
+      <div class="card-section">
+        <div class="card-header">
+          <div class="card-title">
+            <i class="bi bi-person-check-fill" style="color:var(--primary-light);"></i>
+            <span>Ma Position de Cotisation ({{ annee_courante }})</span>
+          </div>
+          <span id="mon-statut-badge" class="badge badge-en-retard">Non réglé</span>
+        </div>
+
+        <div class="personal-status-box">
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:0.75rem;">
+            <div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Cotisation Exigible</div>
+              <div class="app-montant-annuel" style="font-size:1.15rem; font-weight:700; color:#fff;">10 000 FCFA</div>
+            </div>
+            <div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Total Versé</div>
+              <div id="mon-montant-verse" style="font-size:1.15rem; font-weight:700; color:var(--emerald);">0 FCFA</div>
+            </div>
+          </div>
+
+          <!-- Jauge de progression -->
+          <div class="progress-container">
+            <div class="progress-header">
+              <span>Progression annuelle</span>
+              <span id="mon-progress-percent" style="font-weight:700; color:#fff;">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div id="mon-progress-fill" class="progress-bar-fill empty"></div>
+            </div>
+          </div>
+
+          <div style="background:#0f172a; padding:0.75rem; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.8rem; color:#cbd5e1;">Reste à payer :</span>
+            <span id="mon-reste-a-payer" style="font-size:1rem; font-weight:700; color:var(--rose);">10 000 FCFA</span>
+          </div>
+        </div>
+
+        <div class="card-title" style="margin-top:1.5rem; font-size:0.95rem;">
+          <i class="bi bi-clock-history"></i> Historique de mes versements
+        </div>
+        <div id="mon-historique-versements" style="margin-top:0.5rem;">
+          <p style="color:var(--text-muted); font-size:0.85rem; text-align:center; padding:1rem;">Veuillez vous connecter pour voir votre historique.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ONGLET 2 : CAISSE & FINANCES (ÉCONOME & TRÉSORIER) ================= -->
+    <section id="view-caisse" class="tab-view">
+      <div class="card-section">
+        <div class="card-header">
+          <div class="card-title">
+            <i class="bi bi-pie-chart-fill" style="color:var(--gold);"></i>
+            <span>Point Global de l'Exercice {{ annee_courante }}</span>
+          </div>
+          <button onclick="telechargerPDF()" class="btn btn-outline" style="width:auto; padding:0.35rem 0.75rem; font-size:0.75rem;">
+            <i class="bi bi-download"></i> PDF
+          </button>
+        </div>
+
+        <div id="annee-stats-box" style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; margin-bottom:1rem;">
+          <div style="background:#0f172a; padding:0.85rem; border-radius:10px; border:1px solid var(--card-border);">
+            <div style="font-size:0.75rem; color:var(--text-muted);">Taux de Recouvrement</div>
+            <div id="stats-annee-recouvrement" style="font-size:1.3rem; font-weight:800; color:var(--gold);">0%</div>
+          </div>
+          <div style="background:#0f172a; padding:0.85rem; border-radius:10px; border:1px solid var(--card-border);">
+            <div style="font-size:0.75rem; color:var(--text-muted);">Confrères à Jour</div>
+            <div id="stats-annee-a-jour" style="font-size:1.3rem; font-weight:800; color:var(--emerald);">0 / 0</div>
+          </div>
+        </div>
+
+        <!-- Dépenses Diverses Déduites -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; margin-bottom:0.75rem;">
+          <div class="card-title" style="font-size:0.95rem;">
+            <i class="bi bi-receipt-cutoff" style="color:var(--rose);"></i> Dépenses Diverses de la Caisse
+          </div>
+          <button onclick="openModal('modal-add-depense')" class="btn btn-outline role-officer-inline" style="width:auto; padding:0.3rem 0.6rem; font-size:0.75rem; display:none;">
+            + Dépense
+          </button>
+        </div>
+
+        <div id="depenses-container">
+          <p style="color:var(--text-muted); font-size:0.85rem; text-align:center; padding:1rem;">Chargement des dépenses...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ONGLET 3 : CONFRÈRES & ANNIVERSAIRES ================= -->
+    <section id="view-confreres" class="tab-view">
+      <div class="card-section">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              <i class="bi bi-people-fill" style="color:var(--primary-light);"></i>
+              <span>Statut Financier des Confrères</span>
+            </div>
+            <div class="card-subtitle">Cotisation annuelle fixée à 10 000 FCFA</div>
+          </div>
+
+          <button onclick="openModal('modal-create-member')" class="btn btn-primary role-officer-inline" style="width:auto; padding:0.4rem 0.8rem; font-size:0.75rem; display:none;">
+            <i class="bi bi-person-plus"></i> Créer Compte
+          </button>
+        </div>
+
+        <div id="membres-container" class="member-list">
+          <p style="color:var(--text-muted); font-size:0.85rem; text-align:center; padding:1rem;">Chargement des confrères...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ONGLET 4 : NOTIFICATIONS ================= -->
+    <section id="view-notifications" class="tab-view">
+      <div class="card-section">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              <i class="bi bi-bell-fill" style="color:var(--gold);"></i>
+              <span>Centre de Notifications</span>
+            </div>
+            <div class="card-subtitle">Rappels de cotisations & Anniversaires (J-2 et Jour-J)</div>
+          </div>
+          <button onclick="triggerManualReminders()" class="btn btn-outline role-officer-inline" style="width:auto; padding:0.35rem 0.65rem; font-size:0.72rem; display:none;">
+            <i class="bi bi-arrow-repeat"></i> Vérifier
+          </button>
+        </div>
+
+        <div id="notifications-container">
+          <p style="color:var(--text-muted); font-size:0.85rem; text-align:center; padding:1rem;">Chargement des notifications...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ONGLET 5 : PARAMÈTRES & CONFIGURATION ================= -->
+    <section id="view-parametres" class="tab-view">
+      <div class="card-section">
+        <div class="card-header">
+          <div class="card-title">
+            <i class="bi bi-gear-fill" style="color:var(--text-muted);"></i>
+            <span>Paramètres de la Fraternité</span>
+          </div>
+        </div>
+
+        <form onsubmit="handleSaveSettings(event)">
+          <div class="form-group">
+            <label class="form-label">Nom de la Fraternité / Groupe</label>
+            <input type="text" name="nom_groupe" class="form-input" value="{{ params.get('nom_groupe', '') }}">
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem;">
+            <div class="form-group">
+              <label class="form-label">Montant Annuel</label>
+              <input type="number" name="montant_annuel" class="form-input" value="{{ params.get('montant_annuel', '10000') }}">
+              <div class="form-note">Défaut: 10 000</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Devise</label>
+              <input type="text" name="devise" class="form-input" value="{{ params.get('devise', 'FCFA') }}">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Année Active</label>
+            <input type="number" name="annee_active" class="form-input" value="{{ params.get('annee_active', annee_courante) }}">
+          </div>
+
+          <div style="border-top:1px solid var(--card-border); padding-top:1rem; margin-top:1rem;">
+            <div class="card-title" style="font-size:0.9rem; margin-bottom:0.75rem;">
+              <i class="bi bi-envelope-at"></i> Configuration E-mail (SMTP)
+            </div>
+            <div class="form-group">
+              <label class="form-label">Serveur SMTP (ex: smtp.gmail.com)</label>
+              <input type="text" name="smtp_host" class="form-input" value="{{ params.get('smtp_host', '') }}" placeholder="Optionnel pour envoi réel">
+            </div>
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:0.75rem;">
+              <div class="form-group">
+                <label class="form-label">Utilisateur SMTP</label>
+                <input type="text" name="smtp_user" class="form-input" value="{{ params.get('smtp_user', '') }}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Port</label>
+                <input type="number" name="smtp_port" class="form-input" value="{{ params.get('smtp_port', '587') }}">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Mot de passe SMTP</label>
+              <input type="password" name="smtp_password" class="form-input" value="{{ params.get('smtp_password', '') }}">
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary role-officer-only" style="margin-top:0.75rem; display:none;">
+            Enregistrer les modifications
+          </button>
+        </form>
+
+        <div style="border-top:1px solid var(--card-border); padding-top:1rem; margin-top:1.5rem; display:flex; flex-direction:column; gap:0.5rem;">
+          <button onclick="openOutbox()" class="btn btn-outline" style="font-size:0.8rem;">
+            <i class="bi bi-inbox-fill"></i> Consulter la Boîte d'envoi des E-mails
+          </button>
+          <button onclick="triggerManualReminders()" class="btn btn-outline role-officer-inline" style="font-size:0.8rem; display:none;">
+            <i class="bi bi-bell"></i> Tester l'envoi des alertes (Début de mois & Anniversaires)
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- NAVIGATION MOBILE BAS D'ÉCRAN -->
+  <nav class="bottom-nav">
+    <button id="nav-btn-compte" onclick="switchTab('view-mon-compte', this)" class="nav-item active">
+      <i class="bi bi-person-circle"></i>
+      <span>Mon Compte</span>
+    </button>
+
+    <button id="nav-btn-caisse" onclick="switchTab('view-caisse', this)" class="nav-item">
+      <i class="bi bi-wallet2"></i>
+      <span>Caisse</span>
+    </button>
+
+    <button id="nav-btn-confreres" onclick="switchTab('view-confreres', this)" class="nav-item">
+      <i class="bi bi-people-fill"></i>
+      <span>Confrères</span>
+    </button>
+
+    <button id="nav-btn-notifs" onclick="switchTab('view-notifications', this)" class="nav-item">
+      <i class="bi bi-bell-fill"></i>
+      <span>Alertes</span>
+    </button>
+
+    <button id="nav-btn-params" onclick="switchTab('view-parametres', this)" class="nav-item">
+      <i class="bi bi-gear-fill"></i>
+      <span>Paramètres</span>
+    </button>
+  </nav>
+
+  <!-- ================= TOUTES LES MODALES ================= -->
+
+  <!-- MODAL : CONNEXION -->
+  <div id="modal-login" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-lock-fill"></i> Connexion Confrère</div>
+        <button onclick="closeModal('modal-login')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label class="form-label">Adresse E-mail</label>
+            <input type="email" name="email" class="form-input" required placeholder="ex: michel@fraternite.org">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mot de passe</label>
+            <input type="password" name="password" class="form-input" required placeholder="••••••••">
+            <div class="form-note">Mot de passe par défaut : <code>4321</code></div>
+          </div>
+          <div style="text-align:right; margin-bottom:1rem;">
+            <a href="#" onclick="closeModal('modal-login'); openModal('modal-forgot');" style="color:var(--primary-light); font-size:0.78rem; text-decoration:none;">Mot de passe oublié ?</a>
+          </div>
+          <button type="submit" class="btn btn-primary">Se Connecter</button>
+          <div style="text-align:center; margin-top:1rem; font-size:0.8rem; color:var(--text-muted);">
+            Pas encore de compte ? <a href="#" onclick="closeModal('modal-login'); openModal('modal-register');" style="color:var(--gold); font-weight:600;">S'inscrire</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : INSCRIPTION AUTONOME -->
+  <div id="modal-register" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-person-plus-fill"></i> Inscription Sacerdotale</div>
+        <button onclick="closeModal('modal-register')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="handleRegister(event)" enctype="multipart/form-data">
+          <div class="form-group">
+            <label class="form-label">Nom et Prénom (avec titre)</label>
+            <input type="text" name="nom_prenom" class="form-input" required placeholder="ex: Père Augustin Kouadio">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date de Naissance (obligatoire pour les alertes)</label>
+            <input type="date" name="date_naissance" class="form-input" required>
+            <div class="form-note">Tous les confrères recevront une notification à J-2 et le Jour-J</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Adresse E-mail</label>
+            <input type="email" name="email" class="form-input" required placeholder="votre.email@eglise.org">
+            <div class="form-note">Un e-mail de validation sera envoyé pour activer le compte</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Numéro de Téléphone (WhatsApp)</label>
+            <input type="tel" name="telephone" class="form-input" placeholder="+225 07 ...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mot de passe</label>
+            <input type="password" name="password" class="form-input" required placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Photo de profil (Optionnelle)</label>
+            <input type="file" name="photo" class="form-input" accept="image/*" onchange="previewImage(this, 'reg-preview-img')">
+            <div class="photo-preview-wrap">
+              <div class="photo-preview-circle">
+                <img id="reg-preview-img" style="display:none;" alt="Aperçu">
+                <i class="bi bi-camera"></i>
+              </div>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Chacun peut ajouter sa photo ou non à la création</span>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-gold" style="margin-top:1rem;">Créer mon Compte</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : MOT DE PASSE OUBLIÉ -->
+  <div id="modal-forgot" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-key-fill"></i> Mot de passe oublié</div>
+        <button onclick="closeModal('modal-forgot')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.85rem; color:#cbd5e1; margin-bottom:1rem;">
+          Indiquez votre adresse e-mail. Nous vous enverrons un lien sécurisé pour redéfinir votre mot de passe.
+        </p>
+        <form onsubmit="handleForgotPassword(event)">
+          <div class="form-group">
+            <label class="form-label">Adresse E-mail</label>
+            <input type="email" name="email" class="form-input" required placeholder="votre.email@fraternite.org">
+          </div>
+          <button type="submit" class="btn btn-primary">Envoyer le lien de réinitialisation</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : RÉINITIALISER LE MOT DE PASSE (AVEC TOKEN) -->
+  <div id="modal-reset-password" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-shield-lock-fill"></i> Nouveau mot de passe</div>
+        <button onclick="closeModal('modal-reset-password')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="handleResetPassword(event)">
+          <input type="hidden" name="token" id="reset_token_input">
+          <div class="form-group">
+            <label class="form-label">Nouveau mot de passe</label>
+            <input type="password" name="new_password" class="form-input" required placeholder="Minimum 6 caractères">
+          </div>
+          <button type="submit" class="btn btn-primary">Mettre à jour le mot de passe</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : AJOUTER UNE COTISATION (ÉCONOME) -->
+  <div id="modal-add-cotisation" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-cash-coin" style="color:var(--emerald);"></i> Enregistrer une Cotisation</div>
+        <button onclick="closeModal('modal-add-cotisation')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="handleAddCotisation(event)">
+          <div class="form-group">
+            <label class="form-label">Confrère bénéficiaire</label>
+            <select name="user_id" id="cotisation-user-select" class="form-select" required>
+              <option value="">Chargement des confrères...</option>
+            </select>
+            <div class="form-note" style="color:var(--emerald);">Le confrère recevra aussitôt la notification sur son téléphone !</div>
+          </div>
+
+          <div style="display:grid; grid-template-columns: 2fr 1fr; gap:0.75rem;">
+            <div class="form-group">
+              <label class="form-label">Montant Versé</label>
+              <input type="number" name="montant" class="form-input" value="10000" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Année</label>
+              <input type="number" name="annee" class="form-input" value="{{ annee_courante }}" required>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem;">
+            <div class="form-group">
+              <label class="form-label">Date du paiement</label>
+              <input type="date" name="date_paiement" class="form-input" value="{{ date_courante }}" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Mode de règlement</label>
+              <select name="mode_paiement" class="form-select" required>
+                <option value="Espèces">Espèces</option>
+                <option value="Wave">Wave</option>
+                <option value="Orange Money">Orange Money</option>
+                <option value="Moov Money">Moov Money</option>
+                <option value="MTN MoMo">MTN MoMo</option>
+                <option value="Virement Bancaire">Virement Bancaire</option>
+                <option value="Chèque">Chèque</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Référence / Reçu (Optionnel)</label>
+            <input type="text" name="reference" class="form-input" placeholder="ex: TXN-894102">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Note fraternelle / Remarque</label>
+            <input type="text" name="note" class="form-input" placeholder="ex: Cotisation annuelle complète">
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="margin-top:0.5rem;">
+            <i class="bi bi-check2-circle"></i> Valider & Notifier le Confrère
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : AJOUTER UNE DÉPENSE (TRÉSORIER / ÉCONOME) -->
+  <div id="modal-add-depense" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-dash-circle" style="color:var(--rose);"></i> Enregistrer une Dépense Caisse</div>
+        <button onclick="closeModal('modal-add-depense')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="handleAddDepense(event)" enctype="multipart/form-data">
+          <div class="form-group">
+            <label class="form-label">Motif / Désignation de la dépense</label>
+            <input type="text" name="titre" class="form-input" required placeholder="ex: Achat fournitures presbytère ou assistance confrère">
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem;">
+            <div class="form-group">
+              <label class="form-label">Montant à déduire</label>
+              <input type="number" name="montant" class="form-input" required placeholder="ex: 5000">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date de la dépense</label>
+              <input type="date" name="date_depense" class="form-input" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Catégorie</label>
+            <select name="categorie" class="form-select">
+              <option value="Solidarité & Santé">Solidarité & Santé Confrère</option>
+              <option value="Fonctionnement">Fonctionnement & Secrétariat</option>
+              <option value="Retraite & Sessions">Retraite & Sessions sacerdotales</option>
+              <option value="Événement & Liturgie">Événement & Liturgie</option>
+              <option value="Divers">Divers</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Détails complémentaires</label>
+            <textarea name="description" class="form-textarea" rows="2" placeholder="Précisions sur la facture ou le bénéficiaire..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Justificatif / Reçu (Photo ou PDF)</label>
+            <input type="file" name="justificatif" class="form-input" accept="image/*,application/pdf">
+          </div>
+
+          <button type="submit" class="btn btn-danger" style="margin-top:0.5rem;">
+            Déduire de la Caisse
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : CRÉER UN COMPTE CONFRÈRE (PAR L'ÉCONOME, MOT DE PASSE PAR DÉFAUT 4321) -->
+  <div id="modal-create-member" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-person-plus-fill"></i> Créer Compte pour un Confrère</div>
+        <button onclick="closeModal('modal-create-member')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:#172554; border:1px solid #1e40af; border-radius:8px; padding:0.75rem; margin-bottom:1rem; font-size:0.8rem; color:#bfdbfe;">
+          <i class="bi bi-info-circle-fill"></i> <strong>L'économe peut créer des comptes</strong> pour ceux qui ne le peuvent pas. Le mot de passe par défaut est automatiquement fixé à <code>4321</code>.
+        </div>
+        <form onsubmit="handleCreateMember(event)" enctype="multipart/form-data">
+          <div class="form-group">
+            <label class="form-label">Nom et Prénom du Prêtre</label>
+            <input type="text" name="nom_prenom" class="form-input" required placeholder="Père Paul Kouassi">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Date de Naissance (pour notifications J-2 et Jour-J)</label>
+            <input type="date" name="date_naissance" class="form-input" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Adresse E-mail</label>
+            <input type="email" name="email" class="form-input" required placeholder="paul@fraternite.org">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Téléphone (WhatsApp)</label>
+            <input type="tel" name="telephone" class="form-input" placeholder="+225 07 00 00 00 00">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Rôle</label>
+            <select name="role" class="form-select">
+              <option value="membre">Membre (Prêtre)</option>
+              <option value="econome">Économe</option>
+              <option value="tresorier">Trésorier</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Photo du confrère (Optionnelle)</label>
+            <input type="file" name="photo" class="form-input" accept="image/*" onchange="previewImage(this, 'member-preview-img')">
+            <div class="photo-preview-wrap">
+              <div class="photo-preview-circle">
+                <img id="member-preview-img" style="display:none;" alt="Aperçu">
+                <i class="bi bi-person"></i>
+              </div>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Mot de passe attribué : <strong>4321</strong></span>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="margin-top:0.75rem;">Créer le Compte Confrère</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : MENU UTILISATEUR & PROFIL -->
+  <div id="modal-user-menu" class="modal-overlay">
+    <div class="modal-card" style="max-width:360px;">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-person-circle"></i> Espace Confrère</div>
+        <button onclick="closeModal('modal-user-menu')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body" style="text-align:center;">
+        <span id="user-role-badge" class="badge" style="background:#334155; color:#fff; margin-bottom:1rem;">Prêtre</span>
+        <div style="display:flex; flex-direction:column; gap:0.6rem; margin-top:0.5rem;">
+          <button onclick="closeModal('modal-user-menu'); openModal('modal-change-password');" class="btn btn-outline" style="font-size:0.82rem;">
+            <i class="bi bi-shield-lock"></i> Modifier mon mot de passe
+          </button>
+          <button onclick="closeModal('modal-user-menu'); openOutbox();" class="btn btn-outline" style="font-size:0.82rem;">
+            <i class="bi bi-envelope-open"></i> Voir e-mails & validations
+          </button>
+          <button onclick="handleLogout(); closeModal('modal-user-menu');" class="btn btn-danger" style="font-size:0.82rem; margin-top:0.5rem;">
+            <i class="bi bi-box-arrow-right"></i> Déconnexion
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : CHANGER DE MOT DE PASSE -->
+  <div id="modal-change-password" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-key-fill"></i> Modifier mon mot de passe</div>
+        <button onclick="closeModal('modal-change-password')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="handleChangePassword(event)">
+          <div class="form-group">
+            <label class="form-label">Mot de passe actuel</label>
+            <input type="password" name="old_password" class="form-input" required placeholder="ex: 4321">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nouveau mot de passe</label>
+            <input type="password" name="new_password" class="form-input" required placeholder="Nouveau mot de passe">
+          </div>
+          <button type="submit" class="btn btn-primary">Enregistrer le nouveau mot de passe</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : BOÎTE D'ENVOI DES E-MAILS (SIMULATION / INSPECTEUR LOCAL) -->
+  <div id="modal-outbox" class="modal-overlay">
+    <div class="modal-card" style="max-width:540px;">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-mailbox2"></i> Boîte d'envoi & Validations</div>
+        <button onclick="closeModal('modal-outbox')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.8rem; color:#cbd5e1; margin-bottom:0.75rem;">
+          Tous les e-mails émis (validation de compte, mot de passe oublié, alertes d'anniversaires et rappels) sont enregistrés ici. Vous pouvez cliquer sur les liens de validation directement.
+        </p>
+        <div id="outbox-container" style="max-height:380px; overflow-y:auto;">
+          <p style="text-align:center; color:var(--text-muted);">Chargement...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

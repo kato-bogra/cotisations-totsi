@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  cotisations-totsi:
+    build: .
+    container_name: cotisations_paroisse_totsi
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./static/uploads:/app/static/uploads
+    environment:
+      - PORT=8000
