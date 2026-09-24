@@ -1,11 +1,10 @@
 services:
   - type: web
-    name: cotisations-paroisse-totsi
+    name: cotisations-totsi
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     plan: free
-    autoDeploy: true
+    buildCommand: pip install -r requirements.txt && python database.py
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.10.0

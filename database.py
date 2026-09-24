@@ -244,3 +244,7 @@ def seed_data(cursor):
     INSERT INTO notifications (user_id, titre, message, type, created_at)
     VALUES (?, 'Cotisation annuelle 2026 enregistrée', 'Votre versement de 10 000 FCFA a été validé. Vous êtes en règle pour cette année. Merci confrère !', 'cotisation', ?)
     """, (joseph_id, now))
+
+if __name__ == "__main__":
+    init_db()
+    print("Base de données initialisée avec succès.")
