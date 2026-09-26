@@ -302,8 +302,13 @@
               <div class="form-note">Pour Gmail, utilisez un "Mot de passe d'application" de 16 caractères généré dans votre compte Google.</div>
             </div>
             <div class="form-group">
+              <label class="form-label">Ou Clé API Resend (Alternative moderne)</label>
+              <input type="password" name="resend_api_key" class="form-input" value="{{ params.get('resend_api_key', '') }}" placeholder="re_...">
+              <div class="form-note">Alternative sans SMTP : si renseignée, les e-mails partent directement via l'API Resend.</div>
+            </div>
+            <div class="form-group">
               <button type="button" onclick="testSmtpEmail()" class="btn btn-outline" style="font-size:0.8rem; width:100%;">
-                <i class="bi bi-send-check"></i> Tester l'envoi d'un e-mail réel (SMTP)
+                <i class="bi bi-send-check"></i> Tester l'envoi d'un e-mail réel (SMTP / API)
               </button>
             </div>
           </div>
@@ -448,9 +453,12 @@
         <h3 id="val-notice-title" style="margin-bottom:0.75rem; color:#fff;">Compte Créé !</h3>
         <p id="val-notice-msg" style="font-size:0.9rem; color:#cbd5e1; line-height:1.5; margin-bottom:1.5rem;"></p>
         
-        <div id="val-notice-action" style="display:none; margin-bottom:1rem;">
-          <a id="val-notice-btn" href="#" class="btn btn-gold" style="width:100%; display:inline-block; font-size:1rem; padding:0.85rem; text-decoration:none;">
+        <div id="val-notice-action" style="display:none; margin-bottom:1rem; flex-direction:column; gap:0.6rem;">
+          <a id="val-notice-btn" href="#" class="btn btn-gold" style="width:100%; display:inline-block; font-size:0.95rem; padding:0.85rem; text-decoration:none;">
             <i class="bi bi-check2-circle"></i> Activer mon Compte Maintenant
+          </a>
+          <a id="val-notice-wa-btn" href="#" target="_blank" class="btn" style="background:#22c55e; color:#fff; width:100%; display:none; font-size:0.9rem; padding:0.75rem; text-decoration:none;">
+            <i class="bi bi-whatsapp"></i> Envoyer le lien par WhatsApp
           </a>
         </div>
 

@@ -4,6 +4,7 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, date, timedelta
 import json
 import secrets
+import urllib.request
 
 def get_param(db_conn, cle: str, default: str = "") -> str:
     cursor = db_conn.cursor()
@@ -12,36 +13,69 @@ def get_param(db_conn, cle: str, default: str = "") -> str:
     return row["valeur"] if row else default
 
 def send_or_log_email(db_conn, destinataire: str, sujet: str, corps_html: str) -> tuple[bool, str]:
-    """Envoie un email via SMTP si configuré, sinon enregistre dans la boîte de sortie simulée."""
+    """Envoie un email via API Resend ou SMTP si configuré, sinon enregistre dans la boîte de sortie simulée."""
     now = datetime.now().isoformat()
+    resend_key = get_param(db_conn, "resend_api_key", "").strip()
     smtp_host = get_param(db_conn, "smtp_host", "").strip()
     smtp_port = int(get_param(db_conn, "smtp_port", "587") or "587")
     smtp_user = get_param(db_conn, "smtp_user", "").strip()
     smtp_pass = get_param(db_conn, "smtp_password", "").strip()
-    smtp_from = get_param(db_conn, "smtp_from", "noreply@fraternite.org").strip()
+    nom_groupe = get_param(db_conn, "nom_groupe", "Paroisse de Totsi")
+    smtp_from = get_param(db_conn, "smtp_from", "").strip() or f"{nom_groupe} <noreply@fraternite.org>"
     smtp_tls = get_param(db_conn, "smtp_use_tls", "true").lower() in ("true", "1", "yes")
 
     status = "simule"
     sent_real = False
 
-    if smtp_host and smtp_user and smtp_pass:
+    # 1. Priorité à Resend API si clé fournie
+    if resend_key:
+        try:
+            from_addr = get_param(db_conn, "resend_from", "Paroisse de Totsi <onboarding@resend.dev>")
+            payload = json.dumps({
+                "from": from_addr,
+                "to": [destinataire],
+                "subject": sujet,
+                "html": corps_html
+            }).encode('utf-8')
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=payload,
+                headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                if resp.status in (200, 201):
+                    status = "envoye (Resend)"
+                    sent_real = True
+        except Exception as e:
+            print(f"[Resend Error] {e}")
+            status = f"erreur Resend: {str(e)[:100]}"
+
+    # 2. Sinon SMTP classique (Gmail, Brevo, etc.)
+    elif smtp_host and smtp_user and smtp_pass:
         try:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = sujet
-            msg["From"] = smtp_from
+            if "gmail" in smtp_host.lower():
+                from_header = f"{nom_groupe} <{smtp_user}>"
+                actual_from = smtp_user
+            else:
+                from_header = smtp_from
+                actual_from = smtp_user if "@" in smtp_user else "noreply@fraternite.org"
+
+            msg["From"] = from_header
             msg["To"] = destinataire
             msg.attach(MIMEText(corps_html, "html", "utf-8"))
 
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
                 if smtp_tls:
                     server.starttls()
                 server.login(smtp_user, smtp_pass)
-                server.sendmail(smtp_from, [destinataire], msg.as_string())
-            status = "envoye"
+                server.sendmail(actual_from, [destinataire], msg.as_string())
+            status = "envoye (SMTP)"
             sent_real = True
         except Exception as e:
             print(f"[SMTP Error] Impossible d'envoyer l'email: {e}")
-            status = f"erreur: {str(e)[:100]}"
+            status = f"erreur SMTP: {str(e)[:100]}"
 
     cursor = db_conn.cursor()
     cursor.execute("""

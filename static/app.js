@@ -567,9 +567,18 @@ async function handleRegister(e) {
       const actionBox = document.getElementById('val-notice-action');
       const actionBtn = document.getElementById('val-notice-btn');
 
-      if (data.validation_url && !data.email_sent) {
-        actionBox.style.display = 'block';
+      if (data.validation_url) {
+        actionBox.style.display = 'flex';
         actionBtn.href = data.validation_url;
+
+        const waBtn = document.getElementById('val-notice-wa-btn');
+        if (waBtn) {
+          const rawPhone = form.querySelector('[name="telephone"]')?.value || '';
+          const phone = rawPhone.replace(/[^0-9]/g, '');
+          const waMsg = encodeURIComponent(`Bonjour cher confrère, voici votre lien pour activer votre compte sacerdotal sur l'application de la Paroisse de Totsi : ${data.validation_url}`);
+          waBtn.href = phone ? `https://wa.me/${phone}?text=${waMsg}` : `https://api.whatsapp.com/send?text=${waMsg}`;
+          waBtn.style.display = 'inline-block';
+        }
       } else {
         actionBox.style.display = 'none';
       }
