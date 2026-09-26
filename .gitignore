@@ -8,3 +8,17 @@ env/
 venv/
 cloudflared.exe
 *.log
+*.sqlite
+tmp_*
+test_*.py
+inspect_*.py
+check_*.py
+find_*.py
+get_*.py
+verify_*.py
+poll_*.py
+try_*.py
+call_render.py
+render_bundle.js
+search_localstorage.py
+deploy_via_api.py
