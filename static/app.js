@@ -264,6 +264,24 @@ function renderMembresList(membres) {
       }
     }
 
+    // Statut de validation de compte
+    let verificationBadge = '';
+    const isOfficer = currentUser && (currentUser.role === 'econome' || currentUser.role === 'tresorier');
+    if (m.is_verified === 0 || m.is_verified === false) {
+      verificationBadge = `
+        <div style="margin-top:0.35rem;">
+          <span class="badge" style="background:#ef4444;color:#fff;font-size:0.68rem;padding:2px 6px;">
+            <i class="bi bi-shield-exclamation"></i> En attente de validation
+          </span>
+          ${isOfficer ? `
+            <button onclick="validerCompteMembre(${m.id}, '${m.nom_prenom.replace(/'/g, "\\'")}')" class="btn btn-outline" style="font-size:0.68rem;padding:2px 8px;margin-top:0.3rem;color:#10b981;border-color:#10b981;display:inline-flex;align-items:center;gap:3px;">
+              <i class="bi bi-check-circle"></i> Activer le compte
+            </button>
+          ` : ''}
+        </div>
+      `;
+    }
+
     const avatarHtml = m.photo_url 
       ? `<img src="${m.photo_url}" class="member-avatar">`
       : `<div class="member-avatar">${m.nom_prenom.charAt(0)}</div>`;
@@ -278,6 +296,7 @@ function renderMembresList(membres) {
               ${m.telephone ? `<span><i class="bi bi-telephone"></i> ${m.telephone}</span>` : ''}
               ${m.date_naissance ? `<span><i class="bi bi-calendar-heart"></i> ${formatDateFr(m.date_naissance)}</span>` : ''}
               ${bdayBadge}
+              ${verificationBadge}
             </div>
           </div>
         </div>
@@ -513,7 +532,18 @@ async function handleLogin(e) {
       await refreshMonStatut();
       await refreshCaisseResume();
     } else {
-      showToast(data.message || "Erreur de connexion", "error");
+      if (data.not_verified && data.validation_url) {
+        closeModal('modal-login');
+        document.getElementById('val-notice-title').textContent = "Compte en attente de validation";
+        document.getElementById('val-notice-msg').textContent = "Votre compte n'a pas encore été activé. Vous pouvez l'activer immédiatement en cliquant sur le bouton ci-dessous :";
+        const actionBox = document.getElementById('val-notice-action');
+        const actionBtn = document.getElementById('val-notice-btn');
+        actionBox.style.display = 'block';
+        actionBtn.href = data.validation_url;
+        openModal('modal-validation-notice');
+      } else {
+        showToast(data.message || "Erreur de connexion", "error");
+      }
     }
   } catch (err) {
     showToast("Erreur de connexion réseau", "error");
@@ -529,11 +559,22 @@ async function handleRegister(e) {
     const res = await fetch('/api/auth/register', { method: 'POST', body: formData });
     const data = await res.json();
     if (res.ok && data.status === 'success') {
-      showToast(data.message, "success");
       closeModal('modal-register');
       form.reset();
-      // Ouvrir la boîte d'envoi simulée pour faciliter la validation locale
-      openOutbox();
+
+      document.getElementById('val-notice-title').textContent = "Compte Créé avec Succès !";
+      document.getElementById('val-notice-msg').textContent = data.message;
+      const actionBox = document.getElementById('val-notice-action');
+      const actionBtn = document.getElementById('val-notice-btn');
+
+      if (data.validation_url && !data.email_sent) {
+        actionBox.style.display = 'block';
+        actionBtn.href = data.validation_url;
+      } else {
+        actionBox.style.display = 'none';
+      }
+
+      openModal('modal-validation-notice');
     } else {
       showToast(data.message || "Erreur lors de l'inscription", "error");
     }
@@ -550,10 +591,21 @@ async function handleForgotPassword(e) {
   try {
     const res = await fetch('/api/auth/forgot-password', { method: 'POST', body: formData });
     const data = await res.json();
-    showToast(data.message, "info");
     closeModal('modal-forgot');
     form.reset();
-    openOutbox();
+
+    if (data.reset_url && !data.email_sent) {
+      document.getElementById('val-notice-title').textContent = "Réinitialisation du Mot de Passe";
+      document.getElementById('val-notice-msg').textContent = data.message;
+      const actionBox = document.getElementById('val-notice-action');
+      const actionBtn = document.getElementById('val-notice-btn');
+      actionBox.style.display = 'block';
+      actionBtn.textContent = "Changer mon mot de passe";
+      actionBtn.href = data.reset_url;
+      openModal('modal-validation-notice');
+    } else {
+      showToast(data.message, "info");
+    }
   } catch (err) {
     showToast("Erreur réseau", "error");
   }
@@ -737,5 +789,43 @@ function previewImage(input, previewImgId) {
       img.style.display = 'block';
     };
     reader.readAsDataURL(input.files[0]);
+  }
+}
+
+// Validation d'un confrère en 1 clic par l'Économe
+async function validerCompteMembre(userId, nomPrenom) {
+  if (!confirm(`Confirmez-vous l'activation et la validation immédiate du compte de ${nomPrenom} ?`)) return;
+  try {
+    const res = await fetch(`/api/membres/${userId}/valider`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message, "success");
+      await refreshMembres();
+      await refreshCaisseResume();
+    } else {
+      showToast(data.message || "Erreur lors de la validation", "error");
+    }
+  } catch (err) {
+    showToast("Erreur réseau", "error");
+  }
+}
+
+// Test d'envoi d'e-mail SMTP
+async function testSmtpEmail() {
+  const email = prompt("Entrez l'adresse e-mail qui doit recevoir l'e-mail de test :", (currentUser && currentUser.email) ? currentUser.email : "katoespoir@gmail.com");
+  if (!email || !email.includes('@')) return;
+  showToast("Envoi de l'e-mail de test en cours...", "info");
+  try {
+    const formData = new FormData();
+    formData.append("destinataire", email.trim());
+    const res = await fetch('/api/parametres/test-email', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      showToast(data.message, "success");
+    } else {
+      showToast(data.message || "Erreur envoi test", "warning");
+    }
+  } catch (err) {
+    showToast("Erreur réseau lors du test d'envoi", "error");
   }
 }

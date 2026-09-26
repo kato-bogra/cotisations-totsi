@@ -299,6 +299,12 @@
             <div class="form-group">
               <label class="form-label">Mot de passe SMTP</label>
               <input type="password" name="smtp_password" class="form-input" value="{{ params.get('smtp_password', '') }}">
+              <div class="form-note">Pour Gmail, utilisez un "Mot de passe d'application" de 16 caractères généré dans votre compte Google.</div>
+            </div>
+            <div class="form-group">
+              <button type="button" onclick="testSmtpEmail()" class="btn btn-outline" style="font-size:0.8rem; width:100%;">
+                <i class="bi bi-send-check"></i> Tester l'envoi d'un e-mail réel (SMTP)
+              </button>
             </div>
           </div>
 
@@ -424,6 +430,33 @@
           </div>
           <button type="submit" class="btn btn-gold" style="margin-top:1rem;">Créer mon Compte</button>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : NOTIFICATION DE VALIDATION DE COMPTE -->
+  <div id="modal-validation-notice" class="modal-overlay">
+    <div class="modal-card" style="text-align:center;">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-shield-check"></i> Validation du Compte</div>
+        <button onclick="closeModal('modal-validation-notice')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="val-notice-icon" style="font-size:3rem; color:var(--emerald); margin-bottom:1rem;">
+          <i class="bi bi-check-circle-fill"></i>
+        </div>
+        <h3 id="val-notice-title" style="margin-bottom:0.75rem; color:#fff;">Compte Créé !</h3>
+        <p id="val-notice-msg" style="font-size:0.9rem; color:#cbd5e1; line-height:1.5; margin-bottom:1.5rem;"></p>
+        
+        <div id="val-notice-action" style="display:none; margin-bottom:1rem;">
+          <a id="val-notice-btn" href="#" class="btn btn-gold" style="width:100%; display:inline-block; font-size:1rem; padding:0.85rem; text-decoration:none;">
+            <i class="bi bi-check2-circle"></i> Activer mon Compte Maintenant
+          </a>
+        </div>
+
+        <button onclick="closeModal('modal-validation-notice'); openModal('modal-login');" class="btn btn-outline" style="width:100%;">
+          Aller à l'écran de connexion
+        </button>
       </div>
     </div>
   </div>

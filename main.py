@@ -156,9 +156,20 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
         return JSONResponse({"status": "error", "message": "Adresse e-mail ou mot de passe incorrect."}, status_code=400)
 
     if not user["is_verified"]:
+        base_url = str(request.base_url).rstrip("/")
+        token_to_use = user["verification_token"]
+        if not token_to_use:
+            token_to_use = database.secrets.token_urlsafe(32)
+            conn = database.get_db()
+            conn.cursor().execute("UPDATE users SET verification_token = ? WHERE id = ?", (token_to_use, user["id"]))
+            conn.commit()
+            conn.close()
+        val_link = f"{base_url}/valider-compte?token={token_to_use}"
         return JSONResponse({
             "status": "error",
-            "message": "Votre compte n'a pas encore été validé. Veuillez consulter l'e-mail de validation qui vous a été envoyé."
+            "not_verified": True,
+            "validation_url": val_link,
+            "message": "Votre compte n'a pas encore été validé. Cliquez sur le bouton ci-dessous pour l'activer immédiatement."
         }, status_code=400)
 
     request.session["user_id"] = user["id"]
@@ -216,12 +227,19 @@ async def register(
     conn.commit()
 
     base_url = str(request.base_url).rstrip("/")
-    notifications.send_account_validation_email(conn, new_user_id, base_url)
+    sent_real, val_link, status = notifications.send_account_validation_email(conn, new_user_id, base_url)
     conn.close()
+
+    if sent_real:
+        msg = f"Votre compte a été créé avec succès ! Un e-mail de validation a été envoyé à {email.strip()}. Veuillez vérifier votre boîte de réception."
+    else:
+        msg = "Votre compte a été créé avec succès ! Cliquez ci-dessous pour valider immédiatement votre accès sans attendre d'e-mail."
 
     return {
         "status": "success",
-        "message": "Votre compte a été créé avec succès ! Un e-mail de validation vous a été envoyé. Veuillez cliquer sur le lien reçu pour activer votre compte."
+        "email_sent": sent_real,
+        "validation_url": val_link,
+        "message": msg
     }
 
 @app.get("/valider-compte")
@@ -269,11 +287,23 @@ async def forgot_password(request: Request, email: str = Form(...)):
     user = cursor.fetchone()
     if user:
         base_url = str(request.base_url).rstrip("/")
-        notifications.send_reset_password_email(conn, user["id"], base_url)
+        sent_real, reset_link, status = notifications.send_reset_password_email(conn, user["id"], base_url)
+        conn.close()
+        if sent_real:
+            msg = f"Un e-mail de réinitialisation a été envoyé à {email.strip()}. Veuillez consulter votre boîte de réception."
+        else:
+            msg = "Lien de réinitialisation généré. Cliquez sur le bouton ci-dessous pour changer votre mot de passe immédiatement."
+        return {
+            "status": "success",
+            "email_sent": sent_real,
+            "reset_url": reset_link,
+            "message": msg
+        }
     conn.close()
     return {
         "status": "success",
-        "message": "Si cette adresse est enregistrée, les instructions de réinitialisation de mot de passe ont été envoyées par e-mail."
+        "email_sent": False,
+        "message": "Si cette adresse est enregistrée, les instructions ont été générées."
     }
 
 @app.post("/api/auth/reset-password")
@@ -705,6 +735,22 @@ async def create_membre_by_econome(
         "message": f"Compte créé avec succès pour {nom_prenom}. Son mot de passe initial par défaut est '4321'."
     }
 
+@app.post("/api/membres/{user_id}/valider")
+async def valider_membre_par_econome(request: Request, user_id: int):
+    require_econome_or_tresorier(request)
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, nom_prenom FROM users WHERE id = ?", (user_id,))
+    u = cursor.fetchone()
+    if not u:
+        conn.close()
+        return JSONResponse({"status": "error", "message": "Confrère introuvable."}, status_code=404)
+
+    cursor.execute("UPDATE users SET is_verified = 1, verification_token = NULL WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": f"Le compte de {u['nom_prenom']} a été validé et activé avec succès !"}
+
 # ================= RAPPORT PDF & WHATSAPP =================
 
 @app.get("/api/rapport/pdf")
@@ -872,3 +918,23 @@ async def update_parametres(request: Request):
     conn.commit()
     conn.close()
     return {"status": "success", "message": "Paramètres mis à jour."}
+
+@app.post("/api/parametres/test-email")
+async def test_email_smtp(request: Request, destinataire: str = Form(...)):
+    require_econome_or_tresorier(request)
+    conn = database.get_db()
+    nom_groupe = notifications.get_param(conn, "nom_groupe", "Paroisse de Totsi")
+    html = f"""
+    <div style="font-family:sans-serif;max-width:500px;margin:auto;padding:20px;border:1px solid #10b981;border-radius:8px;">
+        <h3 style="color:#10b981;">✅ Test d'envoi d'e-mail réussi !</h3>
+        <p>Le serveur SMTP configuré pour <strong>{nom_groupe}</strong> fonctionne parfaitement.</p>
+        <p>Si vous lisez ce message, vos e-mails de validation et vos notifications d'anniversaires arriveront bien dans les boîtes de réception des confrères.</p>
+        <p style="color:#64748b;font-size:12px;margin-top:20px;">Date et heure du test : {datetime.now().strftime('%d/%m/%Y à %H:%M:%S')}</p>
+    </div>
+    """
+    sent_real, status = notifications.send_or_log_email(conn, destinataire.strip(), f"[{nom_groupe}] ✅ Test d'envoi d'e-mail réussi", html)
+    conn.close()
+    if sent_real:
+        return {"status": "success", "message": f"E-mail de test envoyé avec succès à {destinataire} !"}
+    else:
+        return {"status": "warning", "message": f"Échec de l'envoi direct (Statut: {status}). L'e-mail a été enregistré dans la boîte d'envoi locale."}

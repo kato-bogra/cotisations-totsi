@@ -11,7 +11,7 @@ def get_param(db_conn, cle: str, default: str = "") -> str:
     row = cursor.fetchone()
     return row["valeur"] if row else default
 
-def send_or_log_email(db_conn, destinataire: str, sujet: str, corps_html: str) -> bool:
+def send_or_log_email(db_conn, destinataire: str, sujet: str, corps_html: str) -> tuple[bool, str]:
     """Envoie un email via SMTP si configuré, sinon enregistre dans la boîte de sortie simulée."""
     now = datetime.now().isoformat()
     smtp_host = get_param(db_conn, "smtp_host", "").strip()
@@ -22,6 +22,7 @@ def send_or_log_email(db_conn, destinataire: str, sujet: str, corps_html: str) -
     smtp_tls = get_param(db_conn, "smtp_use_tls", "true").lower() in ("true", "1", "yes")
 
     status = "simule"
+    sent_real = False
 
     if smtp_host and smtp_user and smtp_pass:
         try:
@@ -37,6 +38,7 @@ def send_or_log_email(db_conn, destinataire: str, sujet: str, corps_html: str) -
                 server.login(smtp_user, smtp_pass)
                 server.sendmail(smtp_from, [destinataire], msg.as_string())
             status = "envoye"
+            sent_real = True
         except Exception as e:
             print(f"[SMTP Error] Impossible d'envoyer l'email: {e}")
             status = f"erreur: {str(e)[:100]}"
@@ -47,7 +49,7 @@ def send_or_log_email(db_conn, destinataire: str, sujet: str, corps_html: str) -
     VALUES (?, ?, ?, ?, ?)
     """, (destinataire, sujet, corps_html, status, now))
     db_conn.commit()
-    return True
+    return sent_real, status
 
 def notify_user(db_conn, user_id, titre: str, message: str, type_notif: str, data: dict = None):
     now = datetime.now().isoformat()
@@ -278,12 +280,12 @@ def check_and_send_birthday_notifications(db_conn, force_target_user_id: int = N
 
     return count_notifications
 
-def send_account_validation_email(db_conn, user_id: int, base_url: str):
+def send_account_validation_email(db_conn, user_id: int, base_url: str) -> tuple[bool, str, str]:
     cursor = db_conn.cursor()
     cursor.execute("SELECT nom_prenom, email, verification_token FROM users WHERE id = ?", (user_id,))
     u = cursor.fetchone()
     if not u:
-        return
+        return False, "", "utilisateur_introuvable"
 
     nom_groupe = get_param(db_conn, "nom_groupe", "Notre Fraternité")
     val_link = f"{base_url}/valider-compte?token={u['verification_token']}"
@@ -304,9 +306,10 @@ def send_account_validation_email(db_conn, user_id: int, base_url: str):
         <p style="color: #64748b; font-size: 12px; margin-top: 30px;">Dans la communion fraternelle,<br/>L'Économe</p>
     </div>
     """
-    send_or_log_email(db_conn, u["email"], f"[{nom_groupe}] Validation de votre compte sacerdotal", html)
+    sent_real, status = send_or_log_email(db_conn, u["email"], f"[{nom_groupe}] Validation de votre compte sacerdotal", html)
+    return sent_real, val_link, status
 
-def send_reset_password_email(db_conn, user_id: int, base_url: str):
+def send_reset_password_email(db_conn, user_id: int, base_url: str) -> tuple[bool, str, str]:
     cursor = db_conn.cursor()
     token = secrets.token_urlsafe(32)
     cursor.execute("""
@@ -318,7 +321,7 @@ def send_reset_password_email(db_conn, user_id: int, base_url: str):
     cursor.execute("SELECT nom_prenom, email FROM users WHERE id = ?", (user_id,))
     u = cursor.fetchone()
     if not u:
-        return
+        return False, "", "utilisateur_introuvable"
 
     nom_groupe = get_param(db_conn, "nom_groupe", "Notre Fraternité")
     reset_link = f"{base_url}/reinitialiser-mot-de-passe?token={token}"
@@ -338,4 +341,5 @@ def send_reset_password_email(db_conn, user_id: int, base_url: str):
         <p style="color: #94a3b8; font-size: 12px; margin-top: 25px;">Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail en toute sécurité.</p>
     </div>
     """
-    send_or_log_email(db_conn, u["email"], f"[{nom_groupe}] Réinitialisation de votre mot de passe", html)
+    sent_real, status = send_or_log_email(db_conn, u["email"], f"[{nom_groupe}] Réinitialisation de votre mot de passe", html)
+    return sent_real, reset_link, status
