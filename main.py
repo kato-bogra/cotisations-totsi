@@ -221,25 +221,36 @@ async def register(
 
     cursor.execute("""
     INSERT INTO users (nom_prenom, email, telephone, password_hash, salt, date_naissance, photo_url, role, is_verified, verification_token, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'membre', 0, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'membre', 1, ?, ?)
     """, (nom_prenom.strip(), email.strip(), telephone.strip(), pw_hash, salt, date_naissance, photo_url, verification_token, now))
     new_user_id = cursor.lastrowid
     conn.commit()
+
+    # Connexion automatique immédiate
+    request.session["user_id"] = new_user_id
 
     base_url = str(request.base_url).rstrip("/")
     sent_real, val_link, status = notifications.send_account_validation_email(conn, new_user_id, base_url)
     conn.close()
 
     if sent_real:
-        msg = f"Votre compte a été créé avec succès ! Un e-mail de validation a été envoyé à {email.strip()}. Veuillez vérifier votre boîte de réception."
+        msg = f"Votre compte sacerdotal a été créé et activé avec succès ! Un e-mail de confirmation officiel vous a été envoyé à {email.strip()}."
     else:
-        msg = "Votre compte a été créé avec succès ! Cliquez ci-dessous pour valider immédiatement votre accès sans attendre d'e-mail."
+        msg = "Votre compte sacerdotal a été créé et activé avec succès ! Vous êtes désormais connecté à votre espace personnel."
 
     return {
         "status": "success",
         "email_sent": sent_real,
         "validation_url": val_link,
-        "message": msg
+        "message": msg,
+        "user": {
+            "id": new_user_id,
+            "nom_prenom": nom_prenom.strip(),
+            "email": email.strip(),
+            "role": "membre",
+            "photo_url": photo_url,
+            "must_change_password": False
+        }
     }
 
 @app.get("/valider-compte")
