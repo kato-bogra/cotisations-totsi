@@ -12,10 +12,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   initServiceWorker();
   await loadParams();
   await checkAuth();
+  await checkActiveBroadcast();
   await refreshCaisseResume();
   await refreshMonStatut();
   await refreshMembres();
   await refreshNotifications();
+
+  // Polling des diffusions en arrière-plan toutes les 25 secondes
+  setInterval(checkActiveBroadcast, 25000);
 
   // Vérifier si un token de reset est présent dans l'URL
   const urlParams = new URLSearchParams(window.location.search);
@@ -303,6 +307,21 @@ function renderMembresList(membres) {
         <div class="member-right">
           <div class="member-amount">${formatMoney(m.total_verse)}</div>
           ${statusBadge}
+          ${isOfficer ? `
+            <div class="member-actions-row" style="display:flex; gap:4px; margin-top:0.4rem; justify-content:flex-end;">
+              <button onclick="openEditMemberModal(${m.id})" class="btn-action-sm edit" title="Modifier ce membre" style="background:#334155; color:#38bdf8; border:none; border-radius:4px; padding:4px 7px; font-size:0.75rem; cursor:pointer;">
+                <i class="bi bi-pencil-fill"></i>
+              </button>
+              <button onclick="reinitialiserMdpMembre(${m.id}, '${m.nom_prenom.replace(/'/g, "\\'")}')" class="btn-action-sm key" title="Réinitialiser le mot de passe" style="background:#334155; color:#f59e0b; border:none; border-radius:4px; padding:4px 7px; font-size:0.75rem; cursor:pointer;">
+                <i class="bi bi-key-fill"></i>
+              </button>
+              ${m.id !== currentUser.id ? `
+                <button onclick="supprimerMembre(${m.id}, '${m.nom_prenom.replace(/'/g, "\\'")}')" class="btn-action-sm delete" title="Supprimer définitivement" style="background:#334155; color:#ef4444; border:none; border-radius:4px; padding:4px 7px; font-size:0.75rem; cursor:pointer;">
+                  <i class="bi bi-trash-fill"></i>
+                </button>
+              ` : ''}
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -844,5 +863,238 @@ async function testSmtpEmail() {
     }
   } catch (err) {
     showToast("Erreur réseau lors du test d'envoi", "error");
+  }
+}
+
+// ================= DIFFUSIONS & NOTIFICATIONS SUR TOUS LES ÉCRANS =================
+let currentActiveBroadcast = null;
+
+async function checkActiveBroadcast() {
+  try {
+    const res = await fetch('/api/notifications/derniere-diffusion');
+    if (!res.ok) return;
+    const broadcast = await res.json();
+    const banner = document.getElementById('broadcast-alert-banner');
+    if (!banner) return;
+
+    if (!broadcast || !broadcast.id) {
+      banner.style.display = 'none';
+      currentActiveBroadcast = null;
+      return;
+    }
+
+    currentActiveBroadcast = broadcast;
+    const dismissedId = localStorage.getItem('dismissed_broadcast_id');
+
+    // Remplir les données de la bannière
+    const badgeEl = document.getElementById('broadcast-badge');
+    const titleEl = document.getElementById('broadcast-title');
+    const bodyEl = document.getElementById('broadcast-body');
+    const authorEl = document.getElementById('broadcast-author');
+    const dateEl = document.getElementById('broadcast-date');
+    const deactBtn = document.getElementById('btn-broadcast-deactivate');
+
+    titleEl.textContent = broadcast.titre;
+    bodyEl.textContent = broadcast.message;
+    dateEl.textContent = formatDateRelative(broadcast.created_at);
+    authorEl.innerHTML = `<i class="bi bi-person-check-fill"></i> ${broadcast.auteur_nom}`;
+
+    // Appliquer le style selon le degré d'urgence
+    banner.className = `broadcast-banner ${broadcast.urgence || 'normal'}`;
+    if (broadcast.urgence === 'urgent') {
+      badgeEl.textContent = "🔴 ANNONCE URGENTE";
+      badgeEl.style.background = "#ef4444";
+      badgeEl.style.color = "#fff";
+    } else if (broadcast.urgence === 'important') {
+      badgeEl.textContent = "🟡 ANNONCE IMPORTANTE";
+      badgeEl.style.background = "#f59e0b";
+      badgeEl.style.color = "#000";
+    } else {
+      badgeEl.textContent = "📢 ANNONCE DE L'ÉCONOME";
+      badgeEl.style.background = "#4338ca";
+      badgeEl.style.color = "#fff";
+    }
+
+    // Afficher le bouton de retrait pour l'Économe
+    if (currentUser && (currentUser.role === 'econome' || currentUser.role === 'tresorier')) {
+      if (deactBtn) deactBtn.style.display = 'inline-flex';
+    } else {
+      if (deactBtn) deactBtn.style.display = 'none';
+    }
+
+    // Si pas encore masquée par l'utilisateur, afficher la bannière
+    if (String(dismissedId) !== String(broadcast.id)) {
+      banner.style.display = 'block';
+
+      // Si annonce urgente et non encore acquittée dans la session, ouvrir le popup immédiat
+      const ackKey = `session_acked_broadcast_${broadcast.id}`;
+      if (broadcast.urgence === 'urgent' && !sessionStorage.getItem(ackKey)) {
+        const pBadge = document.getElementById('popup-broadcast-badge');
+        const pTitle = document.getElementById('popup-broadcast-title');
+        const pBody = document.getElementById('popup-broadcast-body');
+        const pAuth = document.getElementById('popup-broadcast-author');
+        const pDate = document.getElementById('popup-broadcast-date');
+
+        if (pBadge && pTitle && pBody) {
+          pBadge.textContent = "🔴 ANNONCE URGENTE — ACTION REQUISE";
+          pBadge.style.background = "#ef4444";
+          pTitle.textContent = broadcast.titre;
+          pBody.textContent = broadcast.message;
+          if (pAuth) pAuth.textContent = `Diffusé par : ${broadcast.auteur_nom}`;
+          if (pDate) pDate.textContent = formatDateRelative(broadcast.created_at);
+          openModal('modal-active-broadcast');
+        }
+      }
+    } else {
+      banner.style.display = 'none';
+    }
+  } catch (err) {
+    console.error('Erreur vérification diffusion:', err);
+  }
+}
+
+function dismissBroadcast() {
+  if (currentActiveBroadcast) {
+    localStorage.setItem('dismissed_broadcast_id', String(currentActiveBroadcast.id));
+  }
+  const banner = document.getElementById('broadcast-alert-banner');
+  if (banner) {
+    banner.style.opacity = '0';
+    banner.style.transform = 'translateY(-10px)';
+    banner.style.transition = 'all 0.3s ease';
+    setTimeout(() => {
+      banner.style.display = 'none';
+      banner.style.opacity = '1';
+      banner.style.transform = 'none';
+    }, 300);
+  }
+  showToast("Annonce masquée de votre écran. Elle reste consultable dans le Centre de Notifications.", "info");
+}
+
+function closeActiveBroadcastModal() {
+  if (currentActiveBroadcast) {
+    sessionStorage.setItem(`session_acked_broadcast_${currentActiveBroadcast.id}`, '1');
+  }
+  closeModal('modal-active-broadcast');
+}
+
+async function deactivateBroadcast() {
+  if (!currentActiveBroadcast) return;
+  if (!confirm("Voulez-vous retirer cette annonce pour TOUS les membres ? Elle ne s'affichera plus sur les écrans.")) return;
+  try {
+    const res = await fetch(`/api/notifications/desactiver-diffusion/${currentActiveBroadcast.id}`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message, "success");
+      document.getElementById('broadcast-alert-banner').style.display = 'none';
+      currentActiveBroadcast = null;
+    }
+  } catch (err) {
+    showToast("Erreur lors du retrait de l'annonce.", "error");
+  }
+}
+
+async function handleSendBroadcast(e) {
+  e.preventDefault();
+  const form = e.target;
+  const formData = new FormData(form);
+  try {
+    const res = await fetch('/api/notifications/diffuser', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      showToast(data.message, "success");
+      closeModal('modal-broadcast');
+      form.reset();
+      // Supprimer le dismiss local pour que l'Économe voie aussi sa propre annonce immédiatement
+      localStorage.removeItem('dismissed_broadcast_id');
+      await checkActiveBroadcast();
+      await refreshNotifications();
+    } else {
+      showToast(data.message || "Erreur lors de la diffusion", "error");
+    }
+  } catch (err) {
+    showToast("Erreur réseau lors de la diffusion", "error");
+  }
+}
+
+// ================= GESTION DES MEMBRES (MODIFICATION, SUPPRESSION, MOT DE PASSE) =================
+
+async function openEditMemberModal(userId) {
+  try {
+    const res = await fetch(`/api/membres/${userId}`);
+    if (!res.ok) {
+      showToast("Impossible de charger les données du membre.", "error");
+      return;
+    }
+    const m = await res.json();
+    document.getElementById('edit-member-id').value = m.id;
+    document.getElementById('edit-member-nom').value = m.nom_prenom;
+    document.getElementById('edit-member-email').value = m.email;
+    document.getElementById('edit-member-telephone').value = m.telephone || '';
+    document.getElementById('edit-member-date-naissance').value = m.date_naissance || '';
+    document.getElementById('edit-member-role').value = m.role || 'membre';
+    document.getElementById('edit-member-new-pwd').value = '';
+    openModal('modal-edit-member');
+  } catch (err) {
+    showToast("Erreur lors de la récupération du membre.", "error");
+  }
+}
+
+async function handleSaveEditMember(e) {
+  e.preventDefault();
+  const form = e.target;
+  const formData = new FormData(form);
+  const userId = document.getElementById('edit-member-id').value;
+  try {
+    const res = await fetch(`/api/membres/${userId}/modifier`, { method: 'POST', body: formData });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      showToast(data.message, "success");
+      closeModal('modal-edit-member');
+      await refreshMembres();
+      await refreshCaisseResume();
+    } else {
+      showToast(data.message || "Erreur lors de la modification", "error");
+    }
+  } catch (err) {
+    showToast("Erreur réseau lors de la modification", "error");
+  }
+}
+
+async function supprimerMembre(userId, nomPrenom) {
+  const confirmMsg = `Êtes-vous sûr de vouloir supprimer définitivement le compte de ${nomPrenom} ?\n\n⚠️ Cette action supprimera également toutes ses cotisations et ses alertes.`;
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const res = await fetch(`/api/membres/${userId}/supprimer`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      showToast(data.message, "success");
+      await refreshMembres();
+      await refreshCaisseResume();
+    } else {
+      showToast(data.message || "Erreur lors de la suppression", "error");
+    }
+  } catch (err) {
+    showToast("Erreur réseau lors de la suppression", "error");
+  }
+}
+
+async function reinitialiserMdpMembre(userId, nomPrenom) {
+  const nouveauMdp = prompt(`Définir un nouveau mot de passe pour ${nomPrenom} :`, "4321");
+  if (!nouveauMdp || !nouveauMdp.trim()) return;
+
+  try {
+    const formData = new FormData();
+    formData.append('mot_de_passe', nouveauMdp.trim());
+    const res = await fetch(`/api/membres/${userId}/reinitialiser-mdp`, { method: 'POST', body: formData });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      showToast(data.message, "success");
+    } else {
+      showToast(data.message || "Erreur de réinitialisation", "error");
+    }
+  } catch (err) {
+    showToast("Erreur réseau lors de la réinitialisation", "error");
   }
 }

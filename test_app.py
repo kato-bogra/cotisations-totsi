@@ -1,5 +1,7 @@
 import sys
 import os
+
+sys.stdout.reconfigure(encoding='utf-8')
 from starlette.testclient import TestClient
 
 # Assurer l'import local
@@ -27,8 +29,8 @@ def run_tests():
     assert "total_depenses_global" in data
     print(f"   -> OK! Avoir en caisse: {data['avoir_en_caisse']} {data['devise']}")
 
-    print("3. Test Connexion Économe (mot de passe 4321) ...")
-    r = client.post("/api/auth/login", data={"email": "econome@fraternite.org", "password": "4321"})
+    print("3. Test Connexion Économe (Eric Badabadi) ...")
+    r = client.post("/api/auth/login", data={"email": "ericbadabadi@gmail.com", "password": "Badabadi2026!"})
     assert r.status_code == 200
     user_data = r.json()
     assert user_data["status"] == "success"
@@ -44,10 +46,10 @@ def run_tests():
     print(f"   -> OK! Total versé: {statut['total_verse']}, Reste: {statut['reste']}")
 
     print("5. Test Ajout de Cotisation par l'Économe (avec notification instantanée) ...")
-    # Récupérer un membre
+    # Récupérer Kato Espoir
     r_membres = client.get("/api/membres")
     membres = r_membres.json()
-    target_membre = next(m for m in membres if m["email"] == "michel@fraternite.org")
+    target_membre = next(m for m in membres if m["email"] == "katoespoir@gmail.com")
     
     r_cot = client.post("/api/cotisations", data={
         "user_id": target_membre["id"],
@@ -62,14 +64,14 @@ def run_tests():
     assert r_cot.json()["status"] == "success"
     print("   -> OK! Cotisation ajoutée avec succès.")
 
-    # Vérifier que le prêtre (Père Michel) a bien reçu sa notification instantanément
-    client_michel = TestClient(app)
-    client_michel.post("/api/auth/login", data={"email": "michel@fraternite.org", "password": "4321"})
-    r_notifs = client_michel.get("/api/notifications")
+    # Vérifier que le confrère (Kato Espoir) a bien reçu sa notification instantanément
+    client_kato = TestClient(app)
+    client_kato.post("/api/auth/login", data={"email": "katoespoir@gmail.com", "password": "Kato2026!"})
+    r_notifs = client_kato.get("/api/notifications")
     assert r_notifs.status_code == 200
     notifs = r_notifs.json()
     assert any("Reçu de cotisation" in n["titre"] or "cotisation" in n["type"] for n in notifs)
-    print("   -> OK! Le confrère (Père Michel) a bien reçu sa notification instantanée.")
+    print("   -> OK! Le confrère (Kato Espoir) a bien reçu sa notification instantanée.")
 
     print("6. Test Ajout d'une Dépense Diverse déduite de la caisse ...")
     caisse_avant = client.get("/api/caisse/resume").json()["avoir_en_caisse"]

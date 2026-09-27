@@ -61,6 +61,27 @@
   <!-- Contenu Principal -->
   <main class="main-content">
 
+    <!-- BANNIÈRE DE DIFFUSION GÉNÉRALE (ÉCONOME -> SUR L'ÉCRAN DE TOUS) -->
+    <div id="broadcast-alert-banner" class="broadcast-banner" style="display:none;">
+      <div class="broadcast-header">
+        <span id="broadcast-badge" class="broadcast-badge">📢 ANNONCE DE L'ÉCONOME</span>
+        <span id="broadcast-date" class="broadcast-date"></span>
+      </div>
+      <div id="broadcast-title" class="broadcast-title"></div>
+      <div id="broadcast-body" class="broadcast-body"></div>
+      <div class="broadcast-footer">
+        <div id="broadcast-author" class="broadcast-author"><i class="bi bi-person-check-fill"></i> Eric Badabadi (Économe)</div>
+        <div style="display:flex; gap:0.4rem; align-items:center;">
+          <button type="button" onclick="dismissBroadcast()" class="btn-broadcast-ack">
+            <i class="bi bi-check2-circle"></i> J'ai bien noté
+          </button>
+          <button type="button" id="btn-broadcast-deactivate" onclick="deactivateBroadcast()" class="btn-broadcast-close role-officer-inline" style="display:none;" title="Retirer cette annonce pour tout le monde">
+            <i class="bi bi-x-circle"></i> Retirer
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- HERO CARD : AVOIR EN CAISSE IMMÉDIAT (À L'OUVERTURE DE L'APP) -->
     <div class="caisse-hero-card">
       <div class="hero-label">
@@ -95,6 +116,11 @@
         <span>Dépense</span>
       </button>
 
+      <button onclick="openModal('modal-broadcast')" class="action-pill-btn gold role-officer-only" style="display:none;">
+        <i class="bi bi-megaphone-fill"></i>
+        <span>Diffuser</span>
+      </button>
+
       <button onclick="partagerWhatsApp()" class="action-pill-btn whatsapp">
         <i class="bi bi-whatsapp"></i>
         <span>WhatsApp</span>
@@ -107,7 +133,7 @@
 
       <button onclick="openModal('modal-create-member')" class="action-pill-btn role-officer-only" style="display:none;">
         <i class="bi bi-person-plus-fill"></i>
-        <span>Nouveau Prêtre</span>
+        <span>Nouveau Membre</span>
       </button>
     </div>
 
@@ -207,14 +233,19 @@
           <div>
             <div class="card-title">
               <i class="bi bi-people-fill" style="color:var(--primary-light);"></i>
-              <span>Statut Financier des Confrères</span>
+              <span>Prêtres & Religieuses</span>
             </div>
             <div class="card-subtitle">Cotisation annuelle fixée à 10 000 FCFA</div>
           </div>
 
-          <button onclick="openModal('modal-create-member')" class="btn btn-primary role-officer-inline" style="width:auto; padding:0.4rem 0.8rem; font-size:0.75rem; display:none;">
-            <i class="bi bi-person-plus"></i> Créer Compte
-          </button>
+          <div style="display:flex; gap:0.4rem;">
+            <button onclick="openModal('modal-broadcast')" class="btn btn-gold role-officer-inline" style="width:auto; padding:0.4rem 0.65rem; font-size:0.75rem; display:none;">
+              <i class="bi bi-megaphone-fill"></i> Diffuser
+            </button>
+            <button onclick="openModal('modal-create-member')" class="btn btn-primary role-officer-inline" style="width:auto; padding:0.4rem 0.65rem; font-size:0.75rem; display:none;">
+              <i class="bi bi-person-plus-fill"></i> Nouveau Membre
+            </button>
+          </div>
         </div>
 
         <div id="membres-container" class="member-list">
@@ -365,61 +396,76 @@
   <div id="modal-login" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">
-        <div class="modal-title"><i class="bi bi-lock-fill"></i> Connexion Confrère</div>
+        <div class="modal-title"><i class="bi bi-lock-fill"></i> Connexion Espace Paroisse</div>
         <button onclick="closeModal('modal-login')" class="modal-close-btn">&times;</button>
       </div>
       <div class="modal-body">
         <form onsubmit="handleLogin(event)">
           <div class="form-group">
-            <label class="form-label">Adresse E-mail</label>
-            <input type="email" name="email" class="form-input" required placeholder="ex: michel@fraternite.org">
+            <label class="form-label">Identifiant (E-mail, Téléphone ou Nom)</label>
+            <input type="text" name="email" class="form-input" required placeholder="ex: ericbadabadi@gmail.com ou Kato Espoir">
+            <div class="form-note">Vous pouvez saisir votre adresse e-mail ou votre nom complet.</div>
           </div>
           <div class="form-group">
             <label class="form-label">Mot de passe</label>
             <input type="password" name="password" class="form-input" required placeholder="••••••••">
-            <div class="form-note">Mot de passe par défaut : <code>4321</code></div>
+            <div class="form-note">Économe : <code>Badabadi2026!</code> • Membres : <code>Kato2026!</code> ou mot de passe choisi</div>
           </div>
           <div style="text-align:right; margin-bottom:1rem;">
             <a href="#" onclick="closeModal('modal-login'); openModal('modal-forgot');" style="color:var(--primary-light); font-size:0.78rem; text-decoration:none;">Mot de passe oublié ?</a>
           </div>
           <button type="submit" class="btn btn-primary">Se Connecter</button>
           <div style="text-align:center; margin-top:1rem; font-size:0.8rem; color:var(--text-muted);">
-            Pas encore de compte ? <a href="#" onclick="closeModal('modal-login'); openModal('modal-register');" style="color:var(--gold); font-weight:600;">S'inscrire</a>
+            Pas encore de compte ? <a href="#" onclick="closeModal('modal-login'); openModal('modal-register');" style="color:var(--gold); font-weight:600;">S'inscrire ici</a>
           </div>
         </form>
       </div>
     </div>
   </div>
 
-  <!-- MODAL : INSCRIPTION AUTONOME -->
+  <!-- MODAL : INSCRIPTION AUTONOME (PRÊTRES & RELIGIEUSES) -->
   <div id="modal-register" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">
-        <div class="modal-title"><i class="bi bi-person-plus-fill"></i> Inscription Sacerdotale</div>
+        <div class="modal-title"><i class="bi bi-person-plus-fill"></i> Inscription Prêtres & Religieuses</div>
         <button onclick="closeModal('modal-register')" class="modal-close-btn">&times;</button>
       </div>
       <div class="modal-body">
+        <div style="background:#064e3b; border:1px solid #059669; border-radius:8px; padding:0.65rem 0.85rem; margin-bottom:1rem; font-size:0.8rem; color:#a7f3d0;">
+          <i class="bi bi-shield-check"></i> <strong>Inscription directe :</strong> votre compte est validé et activé automatiquement dès validation du formulaire.
+        </div>
         <form onsubmit="handleRegister(event)" enctype="multipart/form-data">
-          <div class="form-group">
-            <label class="form-label">Nom et Prénom (avec titre)</label>
-            <input type="text" name="nom_prenom" class="form-input" required placeholder="ex: Père Augustin Kouadio">
+          <div style="display:grid; grid-template-columns: 1fr 2fr; gap:0.6rem;">
+            <div class="form-group">
+              <label class="form-label">Titre / Civilité</label>
+              <select name="titre" class="form-select">
+                <option value="Père">Père</option>
+                <option value="Sœur">Sœur</option>
+                <option value="Frère">Frère</option>
+                <option value="Abbé">Abbé</option>
+                <option value="">Autre</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nom et Prénom</label>
+              <input type="text" name="nom_prenom" class="form-input" required placeholder="ex: Augustin Kouadio">
+            </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Date de Naissance (obligatoire pour les alertes)</label>
+            <label class="form-label">Date de Naissance (pour les alertes fraternelles)</label>
             <input type="date" name="date_naissance" class="form-input" required>
-            <div class="form-note">Tous les confrères recevront une notification à J-2 et le Jour-J</div>
+            <div class="form-note">Chacun recevra une notification fraternelle à J-2 et le Jour-J</div>
           </div>
           <div class="form-group">
             <label class="form-label">Adresse E-mail</label>
-            <input type="email" name="email" class="form-input" required placeholder="votre.email@eglise.org">
-            <div class="form-note">Un e-mail de validation sera envoyé pour activer le compte</div>
+            <input type="email" name="email" class="form-input" required placeholder="votre.email@gmail.com">
           </div>
           <div class="form-group">
             <label class="form-label">Numéro de Téléphone (WhatsApp)</label>
-            <input type="tel" name="telephone" class="form-input" placeholder="+225 07 ...">
+            <input type="tel" name="telephone" class="form-input" placeholder="+228 90 ...">
           </div>
           <div class="form-group">
-            <label class="form-label">Mot de passe</label>
+            <label class="form-label">Mot de passe de votre choix</label>
             <input type="password" name="password" class="form-input" required placeholder="••••••••">
           </div>
           <div class="form-group">
@@ -430,10 +476,12 @@
                 <img id="reg-preview-img" style="display:none;" alt="Aperçu">
                 <i class="bi bi-camera"></i>
               </div>
-              <span style="font-size:0.75rem; color:var(--text-muted);">Chacun peut ajouter sa photo ou non à la création</span>
+              <span style="font-size:0.75rem; color:var(--text-muted);">Ajout facultatif selon votre préférence</span>
             </div>
           </div>
-          <button type="submit" class="btn btn-gold" style="margin-top:1rem;">Créer mon Compte</button>
+          <button type="submit" class="btn btn-gold" style="margin-top:1rem; width:100%; font-size:0.95rem; padding:0.8rem;">
+            <i class="bi bi-person-check-fill"></i> Créer mon Compte & Accéder
+          </button>
         </form>
       </div>
     </div>
@@ -630,21 +678,33 @@
     </div>
   </div>
 
-  <!-- MODAL : CRÉER UN COMPTE CONFRÈRE (PAR L'ÉCONOME, MOT DE PASSE PAR DÉFAUT 4321) -->
+  <!-- MODAL : CRÉER UN COMPTE MEMBRE (PAR L'ÉCONOME, MOT DE PASSE PAR DÉFAUT 4321) -->
   <div id="modal-create-member" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">
-        <div class="modal-title"><i class="bi bi-person-plus-fill"></i> Créer Compte pour un Confrère</div>
+        <div class="modal-title"><i class="bi bi-person-plus-fill"></i> Ajouter un Prêtre ou une Religieuse</div>
         <button onclick="closeModal('modal-create-member')" class="modal-close-btn">&times;</button>
       </div>
       <div class="modal-body">
         <div style="background:#172554; border:1px solid #1e40af; border-radius:8px; padding:0.75rem; margin-bottom:1rem; font-size:0.8rem; color:#bfdbfe;">
-          <i class="bi bi-info-circle-fill"></i> <strong>L'économe peut créer des comptes</strong> pour ceux qui ne le peuvent pas. Le mot de passe par défaut est automatiquement fixé à <code>4321</code>.
+          <i class="bi bi-info-circle-fill"></i> <strong>L'économe peut inscrire directement</strong> des prêtres et des religieuses. Le mot de passe initial par défaut est fixé à <code>4321</code>.
         </div>
         <form onsubmit="handleCreateMember(event)" enctype="multipart/form-data">
-          <div class="form-group">
-            <label class="form-label">Nom et Prénom du Prêtre</label>
-            <input type="text" name="nom_prenom" class="form-input" required placeholder="Père Paul Kouassi">
+          <div style="display:grid; grid-template-columns: 1fr 2fr; gap:0.6rem;">
+            <div class="form-group">
+              <label class="form-label">Titre</label>
+              <select name="titre" class="form-select">
+                <option value="Père">Père</option>
+                <option value="Sœur">Sœur</option>
+                <option value="Frère">Frère</option>
+                <option value="Abbé">Abbé</option>
+                <option value="">Autre</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nom et Prénom</label>
+              <input type="text" name="nom_prenom" class="form-input" required placeholder="ex: Augustin Kouadio">
+            </div>
           </div>
 
           <div class="form-group">
@@ -654,25 +714,24 @@
 
           <div class="form-group">
             <label class="form-label">Adresse E-mail</label>
-            <input type="email" name="email" class="form-input" required placeholder="paul@fraternite.org">
+            <input type="email" name="email" class="form-input" required placeholder="email@gmail.com">
           </div>
 
           <div class="form-group">
             <label class="form-label">Téléphone (WhatsApp)</label>
-            <input type="tel" name="telephone" class="form-input" placeholder="+225 07 00 00 00 00">
+            <input type="tel" name="telephone" class="form-input" placeholder="+228 90 00 00 00">
           </div>
 
           <div class="form-group">
             <label class="form-label">Rôle</label>
             <select name="role" class="form-select">
-              <option value="membre">Membre (Prêtre)</option>
+              <option value="membre">Membre (Prêtre / Religieuse)</option>
               <option value="econome">Économe</option>
-              <option value="tresorier">Trésorier</option>
             </select>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Photo du confrère (Optionnelle)</label>
+            <label class="form-label">Photo (Optionnelle)</label>
             <input type="file" name="photo" class="form-input" accept="image/*" onchange="previewImage(this, 'member-preview-img')">
             <div class="photo-preview-wrap">
               <div class="photo-preview-circle">
@@ -683,8 +742,127 @@
             </div>
           </div>
 
-          <button type="submit" class="btn btn-primary" style="margin-top:0.75rem;">Créer le Compte Confrère</button>
+          <button type="submit" class="btn btn-primary" style="margin-top:0.75rem; width:100%;">Créer le Compte</button>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : MODIFIER UN PRÊTRE OU UNE RELIGIEUSE (ÉCONOME) -->
+  <div id="modal-edit-member" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-pencil-square" style="color:var(--gold);"></i> Modifier le Profil</div>
+        <button onclick="closeModal('modal-edit-member')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="handleSaveEditMember(event)">
+          <input type="hidden" name="user_id" id="edit-member-id">
+
+          <div class="form-group">
+            <label class="form-label">Nom et Prénom (avec titre)</label>
+            <input type="text" name="nom_prenom" id="edit-member-nom" class="form-input" required placeholder="ex: Père Eric ou Sœur Marie">
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem;">
+            <div class="form-group">
+              <label class="form-label">Date de Naissance</label>
+              <input type="date" name="date_naissance" id="edit-member-date-naissance" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Rôle</label>
+              <select name="role" id="edit-member-role" class="form-select">
+                <option value="membre">Membre</option>
+                <option value="econome">Économe</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Adresse E-mail</label>
+            <input type="email" name="email" id="edit-member-email" class="form-input" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Téléphone (WhatsApp)</label>
+            <input type="tel" name="telephone" id="edit-member-telephone" class="form-input" placeholder="+228 ...">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Nouveau mot de passe (Optionnel)</label>
+            <input type="text" name="nouveau_mot_de_passe" id="edit-member-new-pwd" class="form-input" placeholder="Laisser vide pour ne pas changer">
+            <div class="form-note">Utile si le confrère ou la religieuse a égaré son mot de passe.</div>
+          </div>
+
+          <div style="display:flex; gap:0.75rem; margin-top:1.25rem;">
+            <button type="submit" class="btn btn-primary" style="flex:1;">
+              <i class="bi bi-check2"></i> Enregistrer
+            </button>
+            <button type="button" onclick="closeModal('modal-edit-member')" class="btn btn-outline" style="width:auto;">
+              Annuler
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : DIFFUSER UNE NOTIFICATION À TOUS (ÉCONOME -> SUR L'ÉCRAN DE CHACUN) -->
+  <div id="modal-broadcast" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="bi bi-megaphone-fill" style="color:var(--gold);"></i> Diffuser une Notification à Tous</div>
+        <button onclick="closeModal('modal-broadcast')" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:#172554; border:1px solid #1e40af; border-radius:8px; padding:0.75rem; margin-bottom:1rem; font-size:0.8rem; color:#bfdbfe;">
+          <i class="bi bi-broadcast"></i> <strong>Ce message apparaîtra directement sur l'écran de chacun</strong> des prêtres et des religieuses dès l'ouverture de l'application !
+        </div>
+        <form onsubmit="handleSendBroadcast(event)">
+          <div class="form-group">
+            <label class="form-label">Titre de l'annonce</label>
+            <input type="text" name="titre" class="form-input" required placeholder="ex: Réunion pastorale, Rappel des cotisations...">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Niveau d'importance</label>
+            <select name="urgence" class="form-select" required>
+              <option value="normal">🔵 Normal (Information générale)</option>
+              <option value="important">🟡 Important (Convocation ou point d'attention)</option>
+              <option value="urgent">🔴 Urgent (Action immédiate requise)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Message à afficher sur les écrans</label>
+            <textarea name="message" class="form-textarea" rows="4" required placeholder="Rédigez votre annonce ici... Elle sera immédiatement visible par tous."></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-gold" style="margin-top:0.75rem; width:100%; font-size:0.95rem; padding:0.8rem;">
+            <i class="bi bi-send-fill"></i> Diffuser sur l'écran de tous maintenant
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : POPUP ALERTE SUR L'ÉCRAN DE CHACUN (AFFICHAGE IMMÉDIAT) -->
+  <div id="modal-active-broadcast" class="modal-overlay">
+    <div class="modal-card" style="border:2px solid var(--gold); text-align:center;">
+      <div class="modal-header" style="justify-content:center; border:none; padding-bottom:0;">
+        <div style="font-size:2.8rem; color:var(--gold);"><i class="bi bi-megaphone-fill"></i></div>
+      </div>
+      <div class="modal-body" style="padding-top:0.5rem;">
+        <span id="popup-broadcast-badge" class="badge" style="background:#f59e0b; color:#000; font-weight:700; margin-bottom:0.75rem;">ANNONCE OFFICIELLE</span>
+        <h3 id="popup-broadcast-title" style="color:#fff; font-size:1.2rem; margin-bottom:0.75rem;"></h3>
+        <div id="popup-broadcast-body" style="color:#cbd5e1; font-size:0.95rem; line-height:1.6; text-align:left; background:#0f172a; padding:1rem; border-radius:8px; border:1px solid var(--card-border); max-height:200px; overflow-y:auto; white-space:pre-line;"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.75rem; font-size:0.78rem; color:var(--text-muted);">
+          <span id="popup-broadcast-author">Par Eric Badabadi (Économe)</span>
+          <span id="popup-broadcast-date"></span>
+        </div>
+        <button type="button" onclick="closeActiveBroadcastModal()" class="btn btn-gold" style="width:100%; margin-top:1.25rem; font-size:0.95rem; padding:0.8rem;">
+          <i class="bi bi-check2-circle"></i> J'ai bien pris note
+        </button>
       </div>
     </div>
   </div>

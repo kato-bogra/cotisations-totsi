@@ -98,9 +98,23 @@ def init_db():
         user_id INTEGER, -- NULL = pour tous les membres
         titre TEXT NOT NULL,
         message TEXT NOT NULL,
-        type TEXT NOT NULL, -- 'cotisation', 'rappel_mensuel', 'anniversaire_j2', 'anniversaire_jour_j', 'systeme'
+        type TEXT NOT NULL, -- 'cotisation', 'rappel_mensuel', 'anniversaire_j2', 'anniversaire_jour_j', 'systeme', 'diffusion'
         data_json TEXT DEFAULT '{}',
         is_read INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL
+    );
+    """)
+
+    # Table Diffusions d'annonces à tous les membres (apparaîtra sur l'écran de chacun)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS diffusions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        auteur_id INTEGER REFERENCES users(id),
+        auteur_nom TEXT NOT NULL,
+        titre TEXT NOT NULL,
+        message TEXT NOT NULL,
+        urgence TEXT NOT NULL DEFAULT 'normal', -- 'normal', 'important', 'urgent'
+        is_active INTEGER DEFAULT 1,
         created_at TEXT NOT NULL
     );
     """)
@@ -135,115 +149,100 @@ def init_db():
 
     conn.commit()
 
-    # Seed initial si aucun utilisateur
-    cursor.execute("SELECT COUNT(*) as count FROM users")
-    count = cursor.fetchone()["count"]
-    if count == 0:
-        seed_data(cursor)
-        conn.commit()
+    # Synchroniser les comptes officiels (Eric Badabadi comme seul Économe, et Kato Espoir)
+    sync_initial_accounts(conn)
 
     conn.close()
 
-def seed_data(cursor):
+def sync_initial_accounts(conn):
+    cursor = conn.cursor()
     now = datetime.now().isoformat()
     cur_year = date.today().year
 
-    # 1. Économe principal : Père Jean (mot de passe initial : 4321 ou econome123)
-    p_hash, salt = hash_password("4321")
-    cursor.execute("""
-    INSERT INTO users (nom_prenom, email, telephone, password_hash, salt, date_naissance, photo_url, role, is_verified, must_change_password, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
-    """, ("Père Jean-Baptiste (Économe)", "econome@fraternite.org", "+225 07 01 02 03 04", p_hash, salt, "1980-10-15", "", "econome", now))
-    econome_id = cursor.lastrowid
+    # 1. Économe officiel unique : Eric Badabadi
+    # Mot de passe : Badabadi2026!
+    p_hash_eric, salt_eric = hash_password("Badabadi2026!")
+    cursor.execute("SELECT id FROM users WHERE email = 'ericbadabadi@gmail.com' COLLATE NOCASE")
+    row_eric = cursor.fetchone()
+    if row_eric:
+        cursor.execute("""
+        UPDATE users 
+        SET nom_prenom = 'Eric Badabadi (Économe)', 
+            role = 'econome', 
+            password_hash = ?, 
+            salt = ?, 
+            is_verified = 1,
+            telephone = CASE WHEN telephone = '' THEN '+228 90 00 00 01' ELSE telephone END
+        WHERE id = ?
+        """, (p_hash_eric, salt_eric, row_eric["id"]))
+        eric_id = row_eric["id"]
+    else:
+        cursor.execute("""
+        INSERT INTO users (nom_prenom, email, telephone, password_hash, salt, date_naissance, photo_url, role, is_verified, must_change_password, created_at)
+        VALUES ('Eric Badabadi (Économe)', 'ericbadabadi@gmail.com', '+228 90 00 00 01', ?, ?, '1982-04-12', '', 'econome', 1, 0, ?)
+        """, (p_hash_eric, salt_eric, now))
+        eric_id = cursor.lastrowid
 
-    # 2. Trésorier : Père Paul
-    p_hash, salt = hash_password("4321")
-    cursor.execute("""
-    INSERT INTO users (nom_prenom, email, telephone, password_hash, salt, date_naissance, photo_url, role, is_verified, must_change_password, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
-    """, ("Père Paul-Marie (Trésorier)", "tresorier@fraternite.org", "+225 07 11 22 33 44", p_hash, salt, "1978-05-20", "", "tresorier", now))
-    tresorier_id = cursor.lastrowid
+    # 2. Confrère membre : Kato Espoir
+    # Mot de passe : Kato2026!
+    p_hash_kato, salt_kato = hash_password("Kato2026!")
+    cursor.execute("SELECT id FROM users WHERE email = 'katoespoir@gmail.com' COLLATE NOCASE")
+    row_kato = cursor.fetchone()
+    if row_kato:
+        cursor.execute("""
+        UPDATE users 
+        SET nom_prenom = 'Kato Espoir', 
+            role = 'membre', 
+            password_hash = ?, 
+            salt = ?, 
+            is_verified = 1,
+            telephone = CASE WHEN telephone = '' THEN '+228 90 00 00 02' ELSE telephone END
+        WHERE id = ?
+        """, (p_hash_kato, salt_kato, row_kato["id"]))
+        kato_id = row_kato["id"]
+    else:
+        cursor.execute("""
+        INSERT INTO users (nom_prenom, email, telephone, password_hash, salt, date_naissance, photo_url, role, is_verified, must_change_password, created_at)
+        VALUES ('Kato Espoir', 'katoespoir@gmail.com', '+228 90 00 00 02', ?, ?, '1988-08-20', '', 'membre', 1, 0, ?)
+        """, (p_hash_kato, salt_kato, now))
+        kato_id = cursor.lastrowid
 
-    # 3. Confrère 1 : Père Michel (Anniversaire bientôt pour tester les notifications)
-    # Mettons son anniversaire à J-2 ou J-0 par rapport à aujourd'hui
-    today = date.today()
-    bday_michel = f"1985-{today.month:02d}-{(today.day + 2) if today.day <= 26 else today.day:02d}"
-    p_hash, salt = hash_password("4321")
-    cursor.execute("""
-    INSERT INTO users (nom_prenom, email, telephone, password_hash, salt, date_naissance, photo_url, role, is_verified, must_change_password, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)
-    """, ("Père Michel N'Guessan", "michel@fraternite.org", "+225 05 55 66 77 88", p_hash, salt, bday_michel, "", "membre", now))
-    michel_id = cursor.lastrowid
+    # 3. Eric Badabadi est le SEUL Économe : s'assurer qu'aucun autre compte n'a le rôle économe ou trésorier
+    cursor.execute("UPDATE users SET role = 'membre' WHERE id != ? AND role IN ('econome', 'tresorier')", (eric_id,))
 
-    # 4. Confrère 2 : Père Joseph (À jour de sa cotisation)
-    p_hash, salt = hash_password("4321")
-    cursor.execute("""
-    INSERT INTO users (nom_prenom, email, telephone, password_hash, salt, date_naissance, photo_url, role, is_verified, must_change_password, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)
-    """, ("Père Joseph Kouamé", "joseph@fraternite.org", "+225 01 23 45 67 89", p_hash, salt, "1982-12-08", "", "membre", now))
-    joseph_id = cursor.lastrowid
+    # 4. Supprimer les anciens comptes factices @fraternite.org pour laisser la place aux vraies inscriptions
+    cursor.execute("SELECT id FROM users WHERE email LIKE '%@fraternite.org'")
+    demo_users = cursor.fetchall()
+    for du in demo_users:
+        cursor.execute("DELETE FROM cotisations WHERE user_id = ?", (du["id"],))
+        cursor.execute("DELETE FROM notifications WHERE user_id = ?", (du["id"],))
+        cursor.execute("DELETE FROM users WHERE id = ?", (du["id"],))
 
-    # 5. Confrère 3 : Père Antoine (Cotisation partielle)
-    p_hash, salt = hash_password("4321")
-    cursor.execute("""
-    INSERT INTO users (nom_prenom, email, telephone, password_hash, salt, date_naissance, photo_url, role, is_verified, must_change_password, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)
-    """, ("Père Antoine Koffi", "antoine@fraternite.org", "+225 07 44 55 66 77", p_hash, salt, "1990-03-19", "", "membre", now))
-    antoine_id = cursor.lastrowid
+    # 5. S'assurer que le paramètre du nom de groupe est bien Paroisse de Totsi
+    cursor.execute("INSERT OR REPLACE INTO parametres (cle, valeur) VALUES ('nom_groupe', 'Paroisse de Totsi — Fraternité Sacerdotale')")
+    cursor.execute("INSERT OR REPLACE INTO parametres (cle, valeur) VALUES ('montant_annuel', '10000')")
+    cursor.execute("INSERT OR REPLACE INTO parametres (cle, valeur) VALUES ('devise', 'FCFA')")
 
-    # 6. Confrère 4 : Père Emmanuel (Non encore en règle)
-    p_hash, salt = hash_password("4321")
-    cursor.execute("""
-    INSERT INTO users (nom_prenom, email, telephone, password_hash, salt, date_naissance, photo_url, role, is_verified, must_change_password, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)
-    """, ("Père Emmanuel Yao", "emmanuel@fraternite.org", "+225 05 12 34 56 78", p_hash, salt, f"1987-{today.month:02d}-{today.day:02d}", "", "membre", now))
+    # 6. Ajouter au moins une cotisation pour Eric Badabadi s'il n'en a pas pour l'année en cours
+    cursor.execute("SELECT id FROM cotisations WHERE user_id = ? AND annee = ?", (eric_id, cur_year))
+    if not cursor.fetchone():
+        cursor.execute("""
+        INSERT INTO cotisations (user_id, annee, montant, date_paiement, mode_paiement, reference, note, enregistre_par_id, created_at)
+        VALUES (?, ?, 10000, ?, 'Virement', 'VIR-2026-001', 'Cotisation annuelle réglée', ?, ?)
+        """, (eric_id, cur_year, f"{cur_year}-01-15", eric_id, now))
 
-    # Ajouter des cotisations de démonstration
-    # Père Jean (Économe) : 10 000 (Complet)
-    cursor.execute("""
-    INSERT INTO cotisations (user_id, annee, montant, date_paiement, mode_paiement, reference, note, enregistre_par_id, created_at)
-    VALUES (?, ?, 10000, ?, 'Virement', 'VIR-2026-001', 'Cotisation annuelle réglée', ?, ?)
-    """, (econome_id, cur_year, f"{cur_year}-01-15", econome_id, now))
+    # 7. Notification de bienvenue
+    cursor.execute("SELECT COUNT(*) as count FROM notifications WHERE type = 'systeme'")
+    if cursor.fetchone()["count"] == 0:
+        cursor.execute("""
+        INSERT INTO notifications (user_id, titre, message, type, created_at)
+        VALUES (NULL, 'Bienvenue sur votre espace Paroisse de Totsi', 'L application de gestion des cotisations, caisse et alertes est opérationnelle. Eric Badabadi est l économe principal.', 'systeme', ?)
+        """, (now,))
 
-    # Père Paul (Trésorier) : 10 000 (Complet)
-    cursor.execute("""
-    INSERT INTO cotisations (user_id, annee, montant, date_paiement, mode_paiement, reference, note, enregistre_par_id, created_at)
-    VALUES (?, ?, 10000, ?, 'Wave', 'WAV-88741', 'Paiement Wave', ?, ?)
-    """, (tresorier_id, cur_year, f"{cur_year}-01-20", econome_id, now))
+    conn.commit()
 
-    # Père Joseph : 10 000 (Complet)
-    cursor.execute("""
-    INSERT INTO cotisations (user_id, annee, montant, date_paiement, mode_paiement, reference, note, enregistre_par_id, created_at)
-    VALUES (?, ?, 10000, ?, 'Orange Money', 'OM-55412', 'Paiement intégral', ?, ?)
-    """, (joseph_id, cur_year, f"{cur_year}-02-05", econome_id, now))
-
-    # Père Antoine : 5 000 (Partiel - reliquat de 5 000)
-    cursor.execute("""
-    INSERT INTO cotisations (user_id, annee, montant, date_paiement, mode_paiement, reference, note, enregistre_par_id, created_at)
-    VALUES (?, ?, 5000, ?, 'Espèces', 'REC-004', 'Premier acompte', ?, ?)
-    """, (antoine_id, cur_year, f"{cur_year}-02-12", econome_id, now))
-
-    # Ajouter quelques dépenses de démonstration
-    cursor.execute("""
-    INSERT INTO depenses (titre, description, montant, date_depense, categorie, enregistre_par_id, created_at)
-    VALUES (?, ?, 8000, ?, 'Solidarité', ?, ?)
-    """, ("Soutien confrère malade", "Médicaments et assistance fraternelle", f"{cur_year}-02-18", tresorier_id, now))
-
-    cursor.execute("""
-    INSERT INTO depenses (titre, description, montant, date_depense, categorie, enregistre_par_id, created_at)
-    VALUES (?, ?, 5000, ?, 'Fonctionnement', ?, ?)
-    """, ("Frais de secrétariat & fournitures", "Impressions livrets de prière et reçus", f"{cur_year}-03-01", tresorier_id, now))
-
-    # Notifications initiales
-    cursor.execute("""
-    INSERT INTO notifications (user_id, titre, message, type, created_at)
-    VALUES (NULL, 'Bienvenue sur votre espace Fraternité', 'L application de gestion des cotisations et des anniversaires est désormais opérationnelle.', 'systeme', ?)
-    """, (now,))
-
-    cursor.execute("""
-    INSERT INTO notifications (user_id, titre, message, type, created_at)
-    VALUES (?, 'Cotisation annuelle 2026 enregistrée', 'Votre versement de 10 000 FCFA a été validé. Vous êtes en règle pour cette année. Merci confrère !', 'cotisation', ?)
-    """, (joseph_id, now))
+def seed_data(cursor):
+    pass
 
 if __name__ == "__main__":
     init_db()

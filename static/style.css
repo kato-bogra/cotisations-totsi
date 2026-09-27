@@ -891,3 +891,159 @@ body {
   height: 100%;
   object-fit: cover;
 }
+
+/* Broadcast Banner - Flash announcement on everyone's screen */
+.broadcast-banner {
+  margin: 0.75rem 1rem 1rem 1rem;
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: slideDown 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  border-left: 5px solid var(--primary-light);
+  background: linear-gradient(135deg, #1e1b4b 0%, #1e293b 100%);
+  color: #fff;
+}
+
+.broadcast-banner.urgent {
+  border-left: 6px solid #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-left-width: 6px;
+  background: linear-gradient(135deg, #450a0a 0%, #1e293b 100%);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.25);
+}
+
+.broadcast-banner.important {
+  border-left: 6px solid #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-left-width: 6px;
+  background: linear-gradient(135deg, #451a03 0%, #1e293b 100%);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.25);
+}
+
+.broadcast-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.broadcast-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.broadcast-date {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.broadcast-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.4rem;
+}
+
+.broadcast-body {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #e2e8f0;
+  margin-bottom: 0.75rem;
+  white-space: pre-line;
+}
+
+.broadcast-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.78rem;
+}
+
+.broadcast-author {
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.btn-broadcast-ack {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.btn-broadcast-ack:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.btn-broadcast-close {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Action buttons on Member Cards */
+.member-actions-row {
+  display: flex;
+  gap: 5px;
+  margin-top: 0.45rem;
+  justify-content: flex-end;
+}
+
+.btn-action-sm {
+  background: #334155;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-action-sm.edit {
+  color: #38bdf8;
+}
+.btn-action-sm.edit:hover {
+  background: #0284c7;
+  color: #fff;
+}
+
+.btn-action-sm.key {
+  color: #fbbf24;
+}
+.btn-action-sm.key:hover {
+  background: #d97706;
+  color: #fff;
+}
+
+.btn-action-sm.delete {
+  color: #f87171;
+}
+.btn-action-sm.delete:hover {
+  background: #dc2626;
+  color: #fff;
+}
